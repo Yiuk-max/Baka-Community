@@ -1,0 +1,79 @@
+/* 只放视觉样式（颜色/字体/边框/圆角/hover），不放尺寸和布局 —— 见 Docs/开发约束.md 第 4 条
+   色值取自 web 端 frontend/reference-theme.css。 */
+/*字体*/
+QWidget {
+    color: #dcddde;
+    font-family: "Microsoft YaHei UI";
+    font-size: 14px;
+}
+/*登录背景色*/
+#loginPage {
+    background: #1a1a1e;
+}
+
+/*登录卡片、边框、圆角*/
+#loginCard {
+    background: #222225;
+    border: 1px solid #29292d;
+    border-radius: 8px;
+}
+/*登录标题*/
+#loginTitle {
+    color: #f2f3f5;
+    font-size: 24px;    /*字体*/
+    font-weight: 700;   /*粗细*/
+}
+/*登录子标题*/
+#loginSubtitle {
+    color: #949ba4;
+    font-size: 13px;
+}
+/*标签*/
+#fieldLabel {
+    color: #b5bac1;
+    font-size: 12px;
+    font-weight: 600;
+}
+/*登录输入框*/
+#loginInput {
+    background: #17171a;
+    border: 1px solid #29292d;
+    border-radius: 4px;
+    padding: 0 12px;    /*上下、左右内边距*/
+    color: #f2f3f5;
+    selection-background-color: #5a65ea;
+}
+/*焦点时*/
+#loginInput:focus {
+    border: 1px solid #5a65ea;
+}
+/*错误提示*/
+#loginError {
+    color: #da373c;
+    font-size: 12px;
+}
+/*按钮*/
+#primaryButton {
+    background: #5a65ea;
+    border: 0;
+    border-radius: 4px;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 600;
+}
+/*主要操作按钮，鼠标悬浮到按钮变色*/
+#primaryButton:hover {
+    background: #4d55d8;
+}
+/*链接按钮默认样式*/
+#linkButton {
+    background: transparent;
+    border: 0;
+    color: #949ba4;
+    font-size: 12.5px;
+}
+/*次要文字按钮，默认透明，鼠标悬停时变亮并显示下划线*/
+#linkButton:hover {
+    color: #f2f3f5;
+    text-decoration: underline;
+}

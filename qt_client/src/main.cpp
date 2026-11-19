@@ -3,6 +3,7 @@
 
 #include <QApplication>
 #include <QDebug>
+#include <QFile>
 #include <QIcon>
 #include <QSslSocket>
 
@@ -21,6 +22,11 @@ int main(int argc, char *argv[]) {
     QSslSocket::setActiveBackend(QStringLiteral("schannel"));
 #endif
 
+    // QSS 只做视觉（颜色/圆角/hover），布局全部走布局管理器
+    QFile styleFile(QStringLiteral(":/style.qss"));
+    if (styleFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        app.setStyleSheet(QString::fromUtf8(styleFile.readAll()));
+    }
     // 启动时读JSON配置文件
     const appconfig::Config config = appconfig::load();
 

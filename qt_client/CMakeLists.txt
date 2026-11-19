@@ -48,6 +48,8 @@ qt_add_executable(baka_client
     src/MainWindow.cpp
     src/AppConfig.h
     src/AppConfig.cpp
+    src/ui/LoginPage.h
+    src/ui/LoginPage.cpp
     resources/app.rc
     ${PROTO_SRCS}
 )
@@ -60,6 +62,12 @@ add_custom_command(TARGET baka_client POST_BUILD
 )
 
 # 图标：exe 用 app.rc 里的 app.ico；运行时窗口/任务栏图标用同一张图（qrc）
+qt_add_resources(baka_client "appStyles"
+    PREFIX "/"
+    BASE resources
+    FILES resources/style.qss
+)
+
 qt_add_resources(baka_client "appImages"
     PREFIX "/"
     BASE resources
