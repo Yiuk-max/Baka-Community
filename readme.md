@@ -134,6 +134,8 @@ python3 tests/ws_chat_smoke.py 127.0.0.1 8080 /ws --idle-seconds=3
 - **[部署文档.md](Docs/部署文档.md)** —— 从零部署（依赖安装、建库、构建、systemd、Nginx、常见问题）。
 - **[客户端接口文档.txt](Docs/客户端接口文档.txt)** —— 前后端 protobuf / 帧协议接口规范（建议客户端开发者先读此文档）。
 - **[frontend/README.md](frontend/README.md)** —— 前端（Vite + Vue 3）开发构建说明与 UI 交互功能清单。
+- **[qt_client/README.md](qt_client/README.md)** —— Qt 桌面客户端（Qt 6.11 Widgets + WebSocket + protobuf），
+  含 `qt_client/Docs/开发约束.md`（强制编码约束）、`Docs/开发环境.md`（工具链与构建）、`Docs/客户端开发说明.md`（协议与架构规划）。
 - **[社区后端改造方案.md](Docs/社区后端改造方案.md)** —— 社区（Discord 式）后端改造设计、DB 迁移、Redis 缓存点与里程碑。
 - **[protobuf改造方案-done.md](Docs/protobuf改造方案-done.md)** —— JSON → protobuf 的设计、落地文件与验证矩阵。
 - **[WebSocket接入代码改动文档-done.md](Docs/WebSocket接入代码改动文档-done.md)** —— WebSocket 接入历史记录（正文包含旧 JSON/text 阶段，当前协议以接口文档为准）。
@@ -169,6 +171,7 @@ server/
 ├── sql/set_timezone_utc.sql # 旧库时间 UTC 一次性迁移（时间差 8 小时用）
 ├── frontend/               # 前端源码（Vite + Vue 3）：npm run build 输出到 web/
 ├── web/                    # 前端构建产物（由 WS 服务端静态提供，勿手改）
+├── qt_client/              # Qt 桌面客户端（Qt 6.11 Widgets + QWebSocket + protobuf，Windows）
 ├── tests/                  # 可选单元测试 + 端到端冒烟脚本 + 低阶浏览器测试页
 └── build/                  # 构建输出
 ```
