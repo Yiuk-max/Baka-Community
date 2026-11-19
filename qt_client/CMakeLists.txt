@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(BakaQtClient VERSION 0.1.0 LANGUAGES CXX)
+# RC：把 resources/app.rc 编进去，Windows 可执行文件才带图标
+project(BakaQtClient VERSION 0.1.0 LANGUAGES CXX RC)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -45,7 +46,24 @@ qt_add_executable(baka_client
     src/main.cpp
     src/MainWindow.h
     src/MainWindow.cpp
+    src/AppConfig.h
+    src/AppConfig.cpp
+    resources/app.rc
     ${PROTO_SRCS}
+)
+
+# 配置文件：把 qt_client/config.json 复制到可执行目录，运行时改那里的文件即可
+add_custom_command(TARGET baka_client POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/config.json"
+            "$<TARGET_FILE_DIR:baka_client>/config.json"
+)
+
+# 图标：exe 用 app.rc 里的 app.ico；运行时窗口/任务栏图标用同一张图（qrc）
+qt_add_resources(baka_client "appImages"
+    PREFIX "/"
+    BASE resources
+    FILES resources/icons/badge-256.png
 )
 
 target_include_directories(baka_client PRIVATE

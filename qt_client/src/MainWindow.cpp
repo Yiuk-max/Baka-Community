@@ -3,9 +3,10 @@
 #include <QStatusBar>
 #include <QWidget>
 
-MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
+MainWindow::MainWindow(const QString &serverUrl, QWidget *parent) : QMainWindow(parent) {
     setWindowTitle(tr("Baka Community"));
-    resize(1280, 800);
+    resize(1100, 700);
     setCentralWidget(new QWidget(this));
-    statusBar()->showMessage(tr("Qt %1 / 骨架就绪").arg(QT_VERSION_STR));
+    // 骨架阶段把读到的配置显示出来，方便确认 config.json 生效
+    statusBar()->showMessage(tr("Qt %1 / 服务器 %2").arg(QT_VERSION_STR, serverUrl));
 }

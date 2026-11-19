@@ -6,7 +6,7 @@
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
-    explicit MainWindow(QWidget *parent = nullptr);
+    explicit MainWindow(const QString &serverUrl, QWidget *parent = nullptr);
 };
 
 #endif // BAKA_QT_CLIENT_MAINWINDOW_H
