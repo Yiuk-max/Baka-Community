@@ -16,7 +16,7 @@ set(CMAKE_AUTORCC ON)
 #     -DCMAKE_CXX_COMPILER=D:/QT/Tools/mingw1310_64/bin/g++.exe
 # ---------------------------------------------------------------------------
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Network)
-# QWebSocket 需要 Qt WebSockets 模块（维护工具安装后自动启用）
+# QWebSocket 需要 Qt WebSockets 模块（用维护工具安装）
 find_package(Qt6 6.5 QUIET COMPONENTS WebSockets)
 
 qt_standard_project_setup()
@@ -52,6 +52,12 @@ qt_add_executable(baka_client
     src/ui/LoginPage.cpp
     src/ui/LoginDialog.h
     src/ui/LoginDialog.cpp
+    src/net/PacketCodec.h
+    src/net/PacketCodec.cpp
+    src/net/WsClient.h
+    src/net/WsClient.cpp
+    src/net/TlsSetup.h
+    src/net/TlsSetup.cpp
     resources/app.rc
     ${PROTO_SRCS}
 )

@@ -1,5 +1,4 @@
-#ifndef BAKA_APPCONFIG_H
-#define BAKA_APPCONFIG_H
+#pragma once
 
 // 客户端配置文件
 // 文件位置：可执行文件同目录 config.json；由 CMake 从 qt_client/config.json 复制过去。
@@ -22,5 +21,3 @@ QString filePath();
 Config load();
 
 } // namespace appconfig
-
-#endif // BAKA_APPCONFIG_H

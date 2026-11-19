@@ -1,0 +1,32 @@
+#pragma once
+
+// 通用网络收发层（不含任何业务）：跑在独立线程里
+//   连接 / 断开 / 发一帧 / 收一帧。
+// 帧格式由 PacketCodec 负责（4 字节长度 + protobuf），这一层只搬 QByteArray。
+// 心跳之类的业务消息由上层自己拼 Envelope 后调 sendFrame()。
+#include <QByteArray>
+#include <QObject>
+#include <QUrl>
+
+class QWebSocket;
+
+class WsClient : public QObject {
+    Q_OBJECT
+public:
+    explicit WsClient(const QUrl &url, QObject *parent = nullptr);
+
+public slots:
+    void start();                              // 由线程的 started() 触发，在本线程内建 socket 并连接
+    void stop();                               // 关 socket、停心跳定时器（如果上层有）
+    void sendFrame(const QByteArray &payload); // 发一帧（已带 4 字节长度前缀）
+
+signals:
+    void connected();
+    void disconnected(const QString &reason);
+    void frameReceived(const QByteArray &payload);
+    void logMessage(const QString &text);
+
+private:
+    QUrl m_url;
+    QWebSocket *m_socket = nullptr;
+};

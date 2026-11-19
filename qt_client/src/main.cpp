@@ -1,5 +1,6 @@
 #include "AppConfig.h"
 #include "MainWindow.h"
+#include "net/TlsSetup.h"
 #include "ui/LoginDialog.h"
 
 #include <QApplication>
@@ -16,12 +17,12 @@ int main(int argc, char *argv[]) {
     // 窗口/任务栏图标（与 exe 里的 app.ico 同一张图）
     app.setWindowIcon(QIcon(QStringLiteral(":/icons/badge-256.png")));
 
-    // Windows 上固定使用系统 schannel TLS 后端：wss:// 无需随包分发 OpenSSL DLL。
-    // （Qt 6.11 自带 qopensslbackend / qschannelbackend 两个插件，默认优先 openssl）
     //客户端需要加密连接到nginx，而nginx与后端通信时不需要加密
-    #ifdef Q_OS_WIN
-    QSslSocket::setActiveBackend(QStringLiteral("schannel"));
-#endif
+    // Windows 用 schannel（免分发 OpenSSL DLL），其他平台由 Qt 选 openssl（见 net/TlsSetup）
+    const QString tlsError = tlssetup::initialize();
+    if (!tlsError.isEmpty()) {
+        qCritical("[tls] %s", qPrintable(tlsError));
+    }
 
     // QSS 只做视觉（颜色/圆角/hover），布局全部走布局管理器
     QFile styleFile(QStringLiteral(":/style.qss"));
@@ -31,12 +32,11 @@ int main(int argc, char *argv[]) {
     // 启动时读JSON配置文件
     const appconfig::Config config = appconfig::load();
 
-    // 先弹登录窗口（无边框子窗口）：取消/关闭就直接退出程序
+    // 登录/注册暂不接入：先直接进主界面测网络，下面三行接认证时再启用
     // 创建登录页，exec事件循环，阻塞主页，不登录不允许打开
-    LoginDialog loginDialog;
-    if (loginDialog.exec() != QDialog::Accepted) {
-        return 0;
-    }
+    
+    // LoginDialog loginDialog;
+    // if (loginDialog.exec() != QDialog::Accepted) return 0;
 
     MainWindow window(config.serverUrl);
     window.show();

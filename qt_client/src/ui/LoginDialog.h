@@ -1,5 +1,4 @@
-#ifndef BAKA_UI_LOGINDIALOG_H
-#define BAKA_UI_LOGINDIALOG_H
+#pragma once
 
 // 登录 / 注册窗口：无系统标题栏的独立子窗口（对应 web 端的登录浮层）。
 // 窗口本身就是那张卡片，没有标题栏，所以自己提供：× 关闭按钮 + 按住空白处拖动。
@@ -29,5 +28,3 @@ private:
     QPoint m_dragOffset;    //拖拽游标坐标
     bool m_dragging = false;
 };
-
-#endif // BAKA_UI_LOGINDIALOG_H
