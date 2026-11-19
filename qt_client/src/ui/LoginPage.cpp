@@ -34,7 +34,7 @@ LoginPage::LoginPage(QWidget *parent) : QWidget(parent) {
 
     // 主页面纵向居中 + 横向居中
     auto *root = new QVBoxLayout(this);
-    root->setContentsMargins(24, 24, 24, 24);
+    root->setContentsMargins(0, 0, 0, 0);//完全融入Dialog，所以填0
     root->addStretch();//顶部弹簧
 
     auto *row = new QHBoxLayout;

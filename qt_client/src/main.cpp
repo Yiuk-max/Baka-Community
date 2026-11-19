@@ -1,5 +1,6 @@
 #include "AppConfig.h"
 #include "MainWindow.h"
+#include "ui/LoginDialog.h"
 
 #include <QApplication>
 #include <QDebug>
@@ -29,6 +30,13 @@ int main(int argc, char *argv[]) {
     }
     // 启动时读JSON配置文件
     const appconfig::Config config = appconfig::load();
+
+    // 先弹登录窗口（无边框子窗口）：取消/关闭就直接退出程序
+    // 创建登录页，exec事件循环，阻塞主页，不登录不允许打开
+    LoginDialog loginDialog;
+    if (loginDialog.exec() != QDialog::Accepted) {
+        return 0;
+    }
 
     MainWindow window(config.serverUrl);
     window.show();

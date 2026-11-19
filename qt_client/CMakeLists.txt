@@ -50,6 +50,8 @@ qt_add_executable(baka_client
     src/AppConfig.cpp
     src/ui/LoginPage.h
     src/ui/LoginPage.cpp
+    src/ui/LoginDialog.h
+    src/ui/LoginDialog.cpp
     resources/app.rc
     ${PROTO_SRCS}
 )

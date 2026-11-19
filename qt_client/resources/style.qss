@@ -8,10 +8,24 @@ QWidget {
 }
 /*登录背景色*/
 #loginPage {
-    background: #1a1a1e;
+    background: transparent;
 }
 
 /*登录卡片、边框、圆角*/
+
+/*关闭按钮（无边框窗口）*/
+#closeButton {
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    color: #949ba4;
+    font-size: 18px;
+}
+
+#closeButton:hover {
+    background: #2b2b2f;
+    color: #f2f3f5;
+}
 #loginCard {
     background: #222225;
     border: 1px solid #29292d;
