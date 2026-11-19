@@ -1,7 +1,11 @@
 cmake_minimum_required(VERSION 3.21)
 
-# RC：把 resources/app.rc 编进去，Windows 可执行文件才带图标
-project(BakaQtClient VERSION 0.1.0 LANGUAGES CXX RC)
+project(BakaQtClient VERSION 0.1.0 LANGUAGES CXX)
+
+# RC（资源编译器）只有 Windows 有：把 resources/app.rc 编进去，exe 才带图标
+if(WIN32)
+    enable_language(RC)
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -25,24 +29,28 @@ qt_standard_project_setup()
 # protobuf 3.20.3（静态库，用 Qt 的 MinGW 13.1 编译，装在机器级目录 D:/libs）
 #   安装前缀可用 -DPB_PREFIX=... 覆盖；若机器上没有，可回退到工程内 third_party/protobuf。
 # ---------------------------------------------------------------------------
-set(PB_PREFIX "D:/libs/protobuf-3.20.3" CACHE PATH "protobuf install prefix")
-if(NOT EXISTS "${PB_PREFIX}/bin/protoc.exe" AND
-   EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/protobuf/bin/protoc.exe")
-    set(PB_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}/third_party/protobuf")
+if(WIN32)
+    # Windows：用本机手编的静态库（MinGW 13.1 编的，ABI 与 Qt 一致）
+    set(PB_PREFIX "D:/libs/protobuf-3.20.3" CACHE PATH "protobuf install prefix")
+    if(NOT EXISTS "${PB_PREFIX}/bin/protoc.exe" AND
+       EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/protobuf/bin/protoc.exe")
+        set(PB_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}/third_party/protobuf")
+    endif()
+    if(NOT EXISTS "${PB_PREFIX}/bin/protoc.exe")
+        message(FATAL_ERROR "找不到 protobuf（${PB_PREFIX}）。安装方法见 Docs/开发环境.md 第 2 节。")
+    endif()
+    set(Protobuf_INCLUDE_DIR "${PB_PREFIX}/include")
+    set(Protobuf_LIBRARIES   "${PB_PREFIX}/lib/libprotobuf.a")
+    set(Protobuf_PROTOC_EXECUTABLE "${PB_PREFIX}/bin/protoc.exe")
 endif()
-if(NOT EXISTS "${PB_PREFIX}/bin/protoc.exe")
-    message(FATAL_ERROR "找不到 protobuf（${PB_PREFIX}）。安装方法见 Docs/开发环境.md 第 2 节。")
-endif()
-set(Protobuf_INCLUDE_DIR "${PB_PREFIX}/include")
-set(Protobuf_LIBRARIES   "${PB_PREFIX}/lib/libprotobuf.a")
-set(Protobuf_PROTOC_EXECUTABLE "${PB_PREFIX}/bin/protoc.exe")
+# Linux / 其他平台：走系统包（apt install libprotobuf-dev protobuf-compiler）
 find_package(Protobuf REQUIRED)
 
 # message.proto 与后端 src/proto/message.proto 保持同步（勿手改字段号）
 set(PROTO_FILES "${CMAKE_CURRENT_SOURCE_DIR}/proto/message.proto")
 protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
 
-qt_add_executable(baka_client
+set(APP_SOURCES
     src/main.cpp
     src/MainWindow.h
     src/MainWindow.cpp
@@ -58,9 +66,14 @@ qt_add_executable(baka_client
     src/net/WsClient.cpp
     src/net/TlsSetup.h
     src/net/TlsSetup.cpp
-    resources/app.rc
     ${PROTO_SRCS}
 )
+
+if(WIN32)
+    list(APPEND APP_SOURCES resources/app.rc)   # Windows 图标资源（Linux 不需要）
+endif()
+
+qt_add_executable(baka_client ${APP_SOURCES})
 
 # 配置文件：把 qt_client/config.json 复制到可执行目录，运行时改那里的文件即可
 add_custom_command(TARGET baka_client POST_BUILD
@@ -101,4 +114,6 @@ else()
     message(STATUS "Qt WebSockets: 未安装，客户端暂用自研 QTcpSocket 实现（待安装后切换）")
 endif()
 
-set_target_properties(baka_client PROPERTIES WIN32_EXECUTABLE ON)
+if(WIN32)
+    set_target_properties(baka_client PROPERTIES WIN32_EXECUTABLE ON)
+endif()
