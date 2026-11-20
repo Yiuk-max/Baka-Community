@@ -76,9 +76,11 @@ void ChatClient::send(const chat_proto::Envelope &envelope) {
     QMetaObject::invokeMethod(m_core, "sendFrame", Qt::QueuedConnection, Q_ARG(QByteArray, frame));
 }
 
-void ChatClient::login(const QString &identity, const QString &password) {
-    if (!beginAuth(Pending::Login)) return;
+bool ChatClient::hasSavedToken() const {
+    return !QSettings().value(QLatin1String(kTokenKey)).toString().isEmpty();
+}
 
+void ChatClient::login(const QString &identity, const QString &password) {
     chat_proto::Envelope envelope;
     envelope.set_type("login");
     envelope.set_password(password.toStdString());
@@ -90,19 +92,30 @@ void ChatClient::login(const QString &identity, const QString &password) {
     } else {
         envelope.set_email(identity.toStdString());
     }
-    send(envelope);
+    sendAuth(Pending::Login, envelope);
 }
 
 void ChatClient::registerAccount(const QString &nickname, const QString &email,
                                  const QString &password) {
-    if (!beginAuth(Pending::Register)) return;
-
     chat_proto::Envelope envelope;
     envelope.set_type("register");
     envelope.set_username(nickname.toStdString());
     envelope.set_email(email.toStdString());
     envelope.set_password(password.toStdString());
-    send(envelope);
+    sendAuth(Pending::Register, envelope);
+}
+
+void ChatClient::logout() {
+    if (m_uid == 0) return;
+
+    // 服务端只是把这条连接变回未登录，连接本身保留，所以回到登录页可以直接再登录
+    if (m_connected) {
+        chat_proto::Envelope envelope;
+        envelope.set_type("logout");
+        send(envelope);
+    }
+    clearSession();
+    emit loggedOut(false);
 }
 
 void ChatClient::onConnected() {
@@ -112,13 +125,20 @@ void ChatClient::onConnected() {
     m_heartbeatTimer->start();
     emit connected();
 
+    // 有认证请求在等这次连接（断线后点了登录 / 注册）：现在补发
+    if (m_hasQueuedAuth) {
+        m_hasQueuedAuth = false;
+        send(m_queuedAuth);
+        return;
+    }
+
     // 本地存着 token 就自动登录（7 天滑动过期，失效时服务端回 system 文本）
     const QString token = QSettings().value(QLatin1String(kTokenKey)).toString();
-    if (m_uid == 0 && !token.isEmpty() && beginAuth(Pending::Token)) {
+    if (m_uid == 0 && !token.isEmpty()) {
         chat_proto::Envelope envelope;
         envelope.set_type("verify_token");
         envelope.set_token(token.toStdString());
-        send(envelope);
+        sendAuth(Pending::Token, envelope);
     }
 }
 
@@ -146,10 +166,21 @@ void ChatClient::handleFrame(const QByteArray &payload) {
         handleLoginSuccess(envelope);
         return;
     }
-    // 未登录时服务端不会主动推送，所以认证在途期间收到的 system 就是这次请求的结果
-    if (type == QStringLiteral("system") && m_pending != Pending::None) {
-        handleAuthReply(QString::fromStdString(envelope.content()).trimmed());
-        return;
+    if (type == QStringLiteral("system")) {
+        const QString text = QString::fromStdString(envelope.content()).trimmed();
+        // 被顶下线：账号在别处登录，服务端发完这条就会关掉本连接
+        if (m_uid != 0 && text.contains(QLatin1String("you have been kicked offline"))) {
+            clearSession();
+            emit loggedOut(true);
+            return;
+        }
+        // 自己退出登录的回执，状态在 logout() 里已经处理完了
+        if (text.contains(QLatin1String("Logout successful"))) return;
+        // 未登录时服务端不会主动推送，所以认证在途期间收到的 system 就是这次请求的结果
+        if (m_pending != Pending::None) {
+            handleAuthReply(text);
+            return;
+        }
     }
 
     emit envelopeReceived(envelope);
@@ -196,21 +227,33 @@ void ChatClient::sendHeartbeat() {
     send(envelope);
 }
 
-bool ChatClient::beginAuth(Pending pending) {
-    if (!m_connected) {
-        emit authFailed(tr("尚未连接到服务器，请稍后重试"));
-        return false;
-    }
-    if (m_pending != Pending::None) return false; // 上一个请求还没回来
+void ChatClient::sendAuth(Pending pending, const chat_proto::Envelope &envelope) {
+    if (m_pending != Pending::None) return; // 上一个请求还没回来
 
     m_pending = pending;
     m_authTimer->start();
     emit authStarted();
-    return true;
+
+    if (m_connected) {
+        send(envelope);
+        return;
+    }
+    // 没连上（被顶下线后服务端关了连接 / 启动时没连上）：先存着，连上后在 onConnected 里补发。
+    // 连不上的话 onDisconnected 会报错，一直没动静则由 m_authTimer 超时兜底
+    m_queuedAuth = envelope;
+    m_hasQueuedAuth = true;
+    QMetaObject::invokeMethod(m_core, "reconnect", Qt::QueuedConnection);
 }
 
 void ChatClient::failAuth(const QString &message) {
     m_authTimer->stop();
     m_pending = Pending::None;
+    m_hasQueuedAuth = false;
     emit authFailed(message);
+}
+
+void ChatClient::clearSession() {
+    m_uid = 0;
+    m_username.clear();
+    QSettings().remove(QLatin1String(kTokenKey));
 }

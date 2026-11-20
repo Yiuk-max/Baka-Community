@@ -1,7 +1,10 @@
 #include "MainWindow.h"
 
 #include "net/ChatClient.h"
+#include "ui/SoundPlayer.h"
+#include "ui/ToolRail.h"
 
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QStatusBar>
 #include <QTime>
@@ -12,8 +15,31 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
     setWindowTitle(tr("Baka Community"));
     resize(1100, 700);
 
-    // 主界面还没做，先放一个空控件占位
-    setCentralWidget(new QWidget(this));
+    m_sound = new SoundPlayer(this);
+
+    // 主界面横向分三块：左侧工具栏 | 左侧通讯录 | 中间页面，水平布局
+    auto *central = new QWidget(this);
+    auto *layout = new QHBoxLayout(central);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+
+    m_toolRail = new ToolRail(central);
+    layout->addWidget(m_toolRail);
+
+    // 通讯录、中间页面还没做，先各放一个空控件占位（到时候换成各自的 QWidget 子类）
+    m_contactPanel = new QWidget(central);
+    m_contactPanel->setObjectName("contactPanel");
+    m_contactPanel->setFixedWidth(240);   // web 端 --sidebar-w
+    layout->addWidget(m_contactPanel);
+
+    m_centerPage = new QWidget(central);
+    m_centerPage->setObjectName("centerPage");
+    layout->addWidget(m_centerPage, 1);   // 伸展因子1，剩余宽度全给中间
+
+    setCentralWidget(central);
+
+    connect(m_toolRail, &ToolRail::logoDoubleClicked, m_sound, &SoundPlayer::playBaka);
+    connect(m_toolRail, &ToolRail::logoutClicked, m_client, &ChatClient::logout);
 
     connect(m_client, &ChatClient::loginSucceeded, this, [this] {
         statusBar()->showMessage(tr("已登录 %1（UID %2）/ 服务器 %3")

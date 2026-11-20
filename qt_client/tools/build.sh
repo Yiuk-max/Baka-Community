@@ -3,7 +3,7 @@
 #   QT_PREFIX=~/Qt/6.11.1/gcc_64 tools/build.sh
 # 依赖（Ubuntu）：
 #   build-essential cmake ninja-build libprotobuf-dev protobuf-compiler libssl-dev
-#   Qt 需要含 WebSockets 模块（aqt install-qt ... -m qtwebsockets）
+#   Qt 需要含 WebSockets、Multimedia 模块（aqt install-qt ... -m qtwebsockets qtmultimedia）
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

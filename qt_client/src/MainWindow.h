@@ -3,6 +3,8 @@
 
 class ChatClient;
 class QLabel;
+class SoundPlayer;
+class ToolRail;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -12,6 +14,10 @@ public:
 
 private:
     ChatClient *m_client = nullptr;
+    SoundPlayer *m_sound = nullptr;
+    ToolRail *m_toolRail = nullptr;           // 左侧工具栏
+    QWidget *m_contactPanel = nullptr;        // 左侧通讯录
+    QWidget *m_centerPage = nullptr;          // 中间页面
     QLabel *m_heartbeatLabel = nullptr;       // 状态栏右侧：显示收到的心跳
 };
 

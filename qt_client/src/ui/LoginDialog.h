@@ -17,6 +17,7 @@ public:
     void setBusy(bool busy);
     void showError(const QString &message);
     void showRegistered(const QString &uid, const QString &email);
+    void resetForm();
 
 signals:
     void loginRequested(const QString &identity, const QString &password);

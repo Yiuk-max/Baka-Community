@@ -18,6 +18,7 @@ public:
 public slots:
     void start();                              // 由线程的 started() 触发，在本线程内建 socket 并连接
     void stop();                               // 关 socket（心跳定时器在上层 ChatClient，由它自己停）
+    void reconnect();                          // 连接断了之后重新连；正在连 / 已连上时什么都不做
     void sendFrame(const QByteArray &payload); // 发一帧（已带 4 字节长度前缀）
 
 signals:

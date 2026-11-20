@@ -19,7 +19,7 @@ set(CMAKE_AUTORCC ON)
 #     -DCMAKE_PREFIX_PATH=D:/QT/6.11.1/mingw_64 \
 #     -DCMAKE_CXX_COMPILER=D:/QT/Tools/mingw1310_64/bin/g++.exe
 # ---------------------------------------------------------------------------
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Network)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Network Multimedia)
 # QWebSocket 需要 Qt WebSockets 模块（用维护工具安装）
 find_package(Qt6 6.5 QUIET COMPONENTS WebSockets)
 
@@ -60,6 +60,17 @@ set(APP_SOURCES
     src/ui/LoginPage.cpp
     src/ui/LoginDialog.h
     src/ui/LoginDialog.cpp
+    src/ui/AutoLoginDialog.h
+    src/ui/AutoLoginDialog.cpp
+    src/ui/NoticeDialog.h
+    src/ui/NoticeDialog.cpp
+    src/ui/Spinner.h
+    src/ui/Spinner.cpp
+    src/ui/Assets.h
+    src/ui/ToolRail.h
+    src/ui/ToolRail.cpp
+    src/ui/SoundPlayer.h
+    src/ui/SoundPlayer.cpp
     src/net/PacketCodec.h
     src/net/PacketCodec.cpp
     src/net/WsCore.h
@@ -95,6 +106,18 @@ qt_add_resources(baka_client "appImages"
     PREFIX "/"
     BASE resources
     FILES resources/icons/badge-256.png
+          resources/images/logo.png
+          resources/images/default_avatar.png
+          resources/images/default_group_avatar.png
+          resources/images/default_comm_avatar.png
+          resources/images/default_background.png
+)
+
+# 提示音（路径集中在 src/ui/Assets.h）
+qt_add_resources(baka_client "appAudio"
+    PREFIX "/"
+    BASE resources
+    FILES resources/audio/baka.mp3
 )
 
 target_include_directories(baka_client PRIVATE
@@ -104,7 +127,7 @@ target_include_directories(baka_client PRIVATE
 )
 
 target_link_libraries(baka_client PRIVATE
-    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network
+    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Multimedia
     ${Protobuf_LIBRARIES}
 )
 

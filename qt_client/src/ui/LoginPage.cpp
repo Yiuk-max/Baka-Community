@@ -196,6 +196,14 @@ void LoginPage::showRegistered(const QString &uid, const QString &email) {
     m_password->setFocus();
 }
 
+void LoginPage::resetForm() {
+    if (m_forms->currentIndex() == 1) switchMode();
+    setBusy(false);   // 上次登录成功时按钮还停在“请稍候…”
+    m_subtitle->setText(tr("登录以继续使用 Baka Community"));
+    m_password->clear();
+    m_error->hide();
+}
+
 void LoginPage::submitLogin() {
     if (!m_submit->isEnabled()) return; // 请求在途时回车不重复提交
     const QString identity = m_identity->text().trimmed();

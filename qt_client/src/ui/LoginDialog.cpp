@@ -50,6 +50,8 @@ void LoginDialog::showRegistered(const QString &uid, const QString &email) {
     m_page->showRegistered(uid, email);
 }
 
+void LoginDialog::resetForm() { m_page->resetForm(); }
+
 void LoginDialog::mousePressEvent(QMouseEvent *event) {
     if (event->button() == Qt::LeftButton) {//鼠标左键
         m_dragging = true;

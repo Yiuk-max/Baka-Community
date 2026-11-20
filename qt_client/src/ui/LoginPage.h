@@ -18,6 +18,7 @@ public:
     void showError(const QString &message);     // 显示失败原因，并解除 busy
     // 注册成功：切回登录表单并把 UID 填好（注册不建立登录态，还要再登录一次）
     void showRegistered(const QString &uid, const QString &email);
+    void resetForm();                           // 退出登录后再次显示前：回到登录表单、清密码和提示
 
 signals:
     // 账号：UID 或邮箱，原样交给上层判断

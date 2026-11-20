@@ -26,11 +26,13 @@ public:
     bool isConnected() const { return m_connected; }
     int uid() const { return m_uid; }               // 0 = 未登录
     QString username() const { return m_username; }
+    bool hasSavedToken() const;                     // 本地存着 token：连上后会自动登录
 
 public slots:
     // 账号：纯数字按 UID 登录，否则按邮箱登录
     void login(const QString &identity, const QString &password);
     void registerAccount(const QString &nickname, const QString &email, const QString &password);
+    void logout();                                  // 退出登录：通知服务端、清本地 token（连接保留）
 
 signals:
     void connected();
@@ -42,6 +44,8 @@ signals:
     void loginSucceeded();
     void registerSucceeded(const QString &uid, const QString &email); // 注册不建立登录态，还要再登录
     void authFailed(const QString &message);
+    // 已回到未登录状态。kicked = true 表示是被顶下线（账号在别处登录），否则是自己退出
+    void loggedOut(bool kicked);
 
     void envelopeReceived(const chat_proto::Envelope &envelope);      // 上面没消化的消息
 
@@ -54,8 +58,10 @@ private:
     void handleLoginSuccess(const chat_proto::Envelope &envelope);
     void handleAuthReply(const QString &text);      // 认证在途时收到的 system 文本
     void sendHeartbeat();                           // 业务层心跳（服务端没有 WS 自带 ping/pong）
-    bool beginAuth(Pending pending);
+    // 发出认证请求；没连上就先重连，连上后再发
+    void sendAuth(Pending pending, const chat_proto::Envelope &envelope);
     void failAuth(const QString &message);
+    void clearSession();                            // 清掉当前账号和本地 token
 
     QString m_serverUrl;
     QThread *m_netThread = nullptr;
@@ -65,6 +71,8 @@ private:
     qint64 m_heartbeatSentAtMs = 0;                 // 心跳发送时间
     bool m_connected = false;
     Pending m_pending = Pending::None;
+    bool m_hasQueuedAuth = false;                   // 认证请求在等连接建立
+    chat_proto::Envelope m_queuedAuth;
     int m_uid = 0;
     QString m_username;
 };

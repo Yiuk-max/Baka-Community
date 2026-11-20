@@ -31,6 +31,12 @@ void WsCore::stop() {
     if (m_socket) m_socket->close();
 }
 
+void WsCore::reconnect() {
+    if (!m_socket || m_socket->state() != QAbstractSocket::UnconnectedState) return;
+    emit logMessage(tr("正在连接 %1").arg(m_url.toString()));
+    m_socket->open(m_url);
+}
+
 void WsCore::sendFrame(const QByteArray &payload) {
     if (!m_socket || m_socket->state() != QAbstractSocket::ConnectedState) {
         emit logMessage(tr("未连接，发送被丢弃"));

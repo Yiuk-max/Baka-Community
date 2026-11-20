@@ -6,6 +6,67 @@ QWidget {
     font-family: "Microsoft YaHei UI";
     font-size: 14px;
 }
+/*主窗口三栏：左侧工具栏、左侧通讯录、中间页面*/
+#toolRail, #contactPanel {
+    background: #121214;
+}
+#centerPage {
+    background: #1a1a1e;
+}
+/*底部状态栏*/
+QStatusBar {
+    background: #121214;
+    color: #949ba4;
+}
+/*去掉状态栏里每个控件旁边的竖线*/
+QStatusBar::item {
+    border: 0;
+}
+/*工具栏顶部的程序 logo 按钮*/
+#railLogoButton {
+    background: #222225;
+    border: 0;
+    border-radius: 16px;
+}
+/*悬停时变主题色、圆角变大*/
+#railLogoButton:hover {
+    background: #5865f2;
+    border-radius: 24px;
+}
+/*工具栏底部的退出登录按钮*/
+#railLogoutButton {
+    background: transparent;
+    border: 0;
+    border-radius: 16px;
+    color: #949ba4;
+    font-size: 12px;
+}
+/*悬停时变红，提示这是退出*/
+#railLogoutButton:hover {
+    background: #da373c;
+    color: #ffffff;
+}
+/*自动登录等待窗口、通知弹窗的卡片（和登录卡片同色）*/
+#loadingCard, #noticeCard {
+    background: #222225;
+    border: 1px solid #29292d;
+    border-radius: 8px;
+}
+/*等待窗口下方的 “登录...” 文字*/
+#loadingText {
+    color: #b5bac1;
+    font-size: 14px;
+}
+/*通知弹窗的正文*/
+#noticeText {
+    color: #f2f3f5;
+    font-size: 14px;
+}
+/*转圈：灰色底圈 + 蓝色转动的弧*/
+Spinner {
+    qproperty-trackColor: #555965;
+    qproperty-arcColor: #7d88ff;
+}
 /*登录背景色*/
 #loginPage {
     background: transparent;
