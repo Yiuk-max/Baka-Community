@@ -1167,13 +1167,23 @@ watch(() => backend.noticeSeq, () => {
   }
   const registered=/注册成功，UID：(\d+)/.exec(notice)
   if (registered) { demoAuth.identity=registered[1];demoAuthMode.value='登录' }
-  const registeredEn=/Registration successful\. You can now log in with UID (\d+)/.exec(notice)
-  if (registeredEn) { pendingVerifyUid.value=registeredEn[1]; demoAuthSubpage.value='verify'; startVerifyCooldown(60) }
+  // 验证码页入口：backClient 在注册成功/登录被拦截时置位 pendingVerify（不再依赖英文原文匹配）
   if (/Email verified successfully/.test(notice)) { demoAuthSubpage.value='form';demoAuthMode.value='登录';verifyCode.value='';pendingVerifyEmail.value='' }
   if (/Invalid or expired verification code/.test(notice)) { /* notice already shown */ }
   const cooldownMatch=/Please wait (\d+) seconds before requesting another code/.exec(notice)
   if (cooldownMatch) { startVerifyCooldown(Number(cooldownMatch[1])) }
   if (/Verification email sent to/.test(notice)) { startVerifyCooldown(60) }
+})
+watch(() => backend.pendingVerify, (pv) => {
+  if (!pv) return
+  pendingVerifyUid.value = String(pv.uid)
+  if (pv.email) pendingVerifyEmail.value = pv.email
+  demoAuth.identity = String(pv.uid)
+  demoAuthMode.value = '登录'
+  demoLoginOpen.value = true
+  demoAuthSubpage.value = 'verify'
+  startVerifyCooldown(60)
+  backend.pendingVerify = null
 })
 watch(profileEditorOpen, (open) => {
   if (!open) return

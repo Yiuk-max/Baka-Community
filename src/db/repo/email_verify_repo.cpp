@@ -119,3 +119,27 @@ bool email_verify_repo::consume_code(int uid, const std::string& code,
         return false;
     }
 }
+
+// 登录门禁：该 uid 在 purpose 下是否存在"未核销"的验证码记录。
+// 历史账号（本功能上线前注册，从没发过码）没有任何记录 → 返回 false，正常放行。
+bool email_verify_repo::has_pending(int uid, const std::string& purpose) {
+    ConnGuard guard;
+    if (!guard) {
+        std::cerr << "[email_verify_repo] has_pending: no DB connection." << std::endl;
+        return false;   // 查不到就不拦，避免 DB 抖动导致所有人都登不上
+    }
+    try {
+        std::unique_ptr<sql::PreparedStatement> pstmt(
+            guard.get()->prepareStatement(
+                "SELECT 1 FROM email_verification "
+                "WHERE uid = ? AND purpose = ? AND verified_at IS NULL LIMIT 1"));
+        pstmt->setInt(1, uid);
+        pstmt->setString(2, purpose);
+        std::unique_ptr<sql::ResultSet> rs(pstmt->executeQuery());
+        return rs->next();
+    } catch (const sql::SQLException& e) {
+        std::cerr << "[email_verify_repo] has_pending failed: " << e.what()
+                  << " (ERRNO=" << e.getErrorCode() << ")" << std::endl;
+        return false;
+    }
+}

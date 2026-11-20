@@ -15,4 +15,6 @@ public:
 
     bool consume_code(int uid, const std::string& code,
                       const std::string& purpose) override;
+
+    bool has_pending(int uid, const std::string& purpose) override;
 };

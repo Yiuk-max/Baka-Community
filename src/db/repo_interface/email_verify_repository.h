@@ -32,4 +32,8 @@ public:
     // 不匹配或已核销返回 false。
     virtual bool consume_code(int uid, const std::string& code,
                               const std::string& purpose) = 0;
+
+    // 是否为“待验证”状态：存在未核销的验证码记录即为待验证（登录门禁用）。
+    // 从未发过码的历史账号（本功能上线前注册）返回 false，不会被拦住。
+    virtual bool has_pending(int uid, const std::string& purpose) = 0;
 };

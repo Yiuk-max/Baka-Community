@@ -37,6 +37,7 @@ export const backend = reactive({
   transferOrder: [],
   lastNotice: '',
   noticeSeq: 0,
+  pendingVerify: null,   // { uid, email }：注册成功或登录被邮箱验证拦截时置位，App.vue 监听后跳验证码页
 })
 
 let ws = null
@@ -483,7 +484,9 @@ function systemMessage(content) {
   const addedMember = /Member \[(\d+)\] added to community \[(\d+)\]/i.exec(text)
   const addedToCommunity = /You have been added to community \[(\d+)\]/i.exec(text)
   const failedCommunityAdd = /Failed to add member \((.*?)\)/i.exec(text)
-  const registration = /Registration successful.*UID (\d+).*?or ([^\s.]+)\./.exec(text)
+  // 邮箱可能含 "."，所以邮箱部分不能用 [^\s.]+（旧正则会在第一个点截断，导致重发验证码收不到）
+  const registration = /Registration successful.*?UID (\d+).*?or (.+?)\.?\s*$/i.exec(text)
+  const notVerified = /Email not verified for UID (\d+)/i.exec(text)
   if (addedMember) {
     const targetUid = Number(addedMember[1]); const communityId = Number(addedMember[2])
     const index = communityAddQueue.findIndex((item) => item.communityId === communityId && item.uid === targetUid)
@@ -500,7 +503,16 @@ function systemMessage(content) {
     communityAddQueue.shift()
     notice(t('添加社区成员失败：仅社区所有者可添加，或该用户已在社区中'))
   }
-  else if (registration) { try { localStorage.setItem(EMAIL_KEY + registration[1], registration[2]) } catch {} notice(t('注册成功，UID：{0}，请登录', registration[1])) }
+  else if (registration) {
+    try { localStorage.setItem(EMAIL_KEY + registration[1], registration[2]) } catch {}
+    // 注册成功后把 uid/邮箱交给 App.vue，直接切到验证码页（原来靠匹配英文原文，但 notice 已被翻译成中文，那段是死代码）
+    backend.pendingVerify = { uid: registration[1], email: registration[2] }
+    notice(t('注册成功，UID：{0}，请输入邮箱验证码', registration[1]))
+  }
+  else if (notVerified) {
+    backend.pendingVerify = { uid: notVerified[1], email: '' }
+    notice(t('邮箱未验证，请先输入验证码'))
+  }
   else if (/Avatar updated successfully/.test(text)) { if (pendingAvatarId > 0) backend.avatarId = pendingAvatarId; pendingAvatarId = 0; notice(text) }
   else if (/Failed to update avatar|Invalid file_id|Avatar file not found|not allowed for avatar/i.test(text)) { pendingAvatarId = 0; notice(text) }
   else if (/Your account is logged in elsewhere, you have been kicked offline/i.test(text)) {

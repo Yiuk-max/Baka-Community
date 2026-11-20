@@ -118,6 +118,14 @@ void login(client_session& s, int UID, std::string password) {
         s.package_message("Incorrect password for UID [" + std::to_string(UID) + "].\n", "system");
         return;
     }
+    // 邮箱验证门禁：密码正确但仍有未核销的注册验证码 → 先验证邮箱再登录。
+    // 本功能上线前注册的历史账号没有验证码记录，has_pending 返回 false，不受影响。
+    if (s.repo_hub()->email_verify()->has_pending(UID, "register")) {
+        s.package_message("Email not verified for UID " + std::to_string(UID) +
+                          ". Please enter the verification code sent to your email before logging in.\n",
+                          "system");
+        return;
+    }
     // 生成并持久化 token，随后返回给前端保存
     std::string token = logic::generate_token();
     s.repo_hub()->accounts()->update_token(UID, token);
