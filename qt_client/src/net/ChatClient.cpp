@@ -118,6 +118,50 @@ void ChatClient::logout() {
     emit loggedOut(false);
 }
 
+void ChatClient::changeName(const QString &name) {
+    chat_proto::Envelope envelope;
+    envelope.set_type("change_name");
+    envelope.set_new_name(name.toStdString());
+    send(envelope);
+}
+
+void ChatClient::changeEmail(const QString &email) {
+    chat_proto::Envelope envelope;
+    envelope.set_type("set_email");
+    envelope.set_email(email.toStdString());
+    send(envelope);
+}
+
+// 回执原文见后端 src/logic/handlers/auth_handler.cpp 的 change_my_name / set_email
+bool ChatClient::handleProfileReply(const QString &text) {
+    static const QRegularExpression renamed(
+        QStringLiteral("^Name updated successfully\\. Your new name is \\[(.*)\\]\\.$"));
+    static const QRegularExpression emailUpdated(
+        QStringLiteral("^Email updated successfully\\. Your email is \\[(.*)\\]\\.$"));
+
+    QRegularExpressionMatch match = renamed.match(text);
+    if (match.hasMatch()) {
+        m_username = match.captured(1);
+        emit profileChanged();
+        return true;
+    }
+    match = emailUpdated.match(text);
+    if (match.hasMatch()) {
+        m_email = match.captured(1);
+        emit profileChanged();
+        return true;
+    }
+    if (text.startsWith(QLatin1String("Failed to update name"))) {
+        emit profileChangeFailed(tr("昵称修改失败，服务器暂时不可用"));
+        return true;
+    }
+    if (text.startsWith(QLatin1String("Failed to set email"))) {
+        emit profileChangeFailed(tr("邮箱修改失败，该邮箱可能已被其他账号使用"));
+        return true;
+    }
+    return false;
+}
+
 void ChatClient::onConnected() {
     m_connected = true;
     // 连上就先发一次心跳，之后交给定时器
@@ -181,6 +225,7 @@ void ChatClient::handleFrame(const QByteArray &payload) {
             handleAuthReply(text);
             return;
         }
+        if (handleProfileReply(text)) return;
     }
 
     emit envelopeReceived(envelope);
@@ -191,6 +236,7 @@ void ChatClient::handleLoginSuccess(const chat_proto::Envelope &envelope) {
     m_pending = Pending::None;
     m_uid = envelope.user().id();
     m_username = QString::fromStdString(envelope.user().username());
+    m_email = QString::fromStdString(envelope.email());
     QSettings().setValue(QLatin1String(kTokenKey), QString::fromStdString(envelope.token()));
     emit loginSucceeded();
 }
@@ -255,5 +301,6 @@ void ChatClient::failAuth(const QString &message) {
 void ChatClient::clearSession() {
     m_uid = 0;
     m_username.clear();
+    m_email.clear();
     QSettings().remove(QLatin1String(kTokenKey));
 }

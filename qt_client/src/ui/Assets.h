@@ -13,6 +13,9 @@ inline QString defaultCommunityAvatar() { return QStringLiteral(":/images/defaul
 inline QString defaultBackground() { return QStringLiteral(":/images/default_background.png"); }
 // 设置按钮的齿轮图标
 inline QString settingsIcon() { return QStringLiteral(":/icons/settings.png"); }
+// 滑动开关的关 / 开两张图
+inline QString toggleOff() { return QStringLiteral(":/icons/toggle_off.png"); }
+inline QString toggleOn() { return QStringLiteral(":/icons/toggle_on.png"); }
 // QMediaPlayer 要的是 URL 形式
 inline QString bakaSoundUrl() { return QStringLiteral("qrc:/audio/baka.mp3"); }
 

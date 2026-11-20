@@ -36,6 +36,7 @@ qt_client/
 │   └── ui/                     # LoginPage（表单）/ LoginDialog（无边框登录窗口）
 │                               # AutoLoginDialog（自动登录等待窗口）/ Spinner（转圈）/ NoticeDialog（通知弹窗）
 │                               # ToolRail（左侧工具栏）/ ContactPanel（左侧通讯录）/ Avatar（头像裁圆角）
+│                               # SettingsDialog（设置窗口）/ AccountSettingsPage / BakaSettingsPage（设置里的两页）
 │                               # SoundPlayer（提示音）/ Assets.h（静态资源路径）
 ├── tools/build.bat             # Windows：固定工具链的一键构建脚本
 ├── tools/build.sh              # Linux / macOS 构建脚本
@@ -74,14 +75,14 @@ cmake --build ./qt_client/build -j4
 - [x] 工具链打通（Qt 6.11.1 + MinGW 13.1 + CMake 3.30.5 + Ninja 1.12.1 + Qt Creator 19.0.2）
 - [x] protobuf 3.20.3 静态库（Qt 的 MinGW 13.1 编译，装在 `D:/libs`）
 - [x] `message.proto` 自动生成并在构建中使用（protoc 3.20.3）
-- [x] Qt WebSockets 6.11.1 已安装，CMake 自动链接（`BAKA_HAVE_QT_WEBSOCKETS=1`）
+- [x] Qt WebSockets 6.11.1 已安装，CMake 里是必需组件（缺了 configure 阶段直接报错）
 - [x] 生产环境连通性已验证：`wss://bakacomm.world/ws` 握手 + 收发一帧 Envelope
       （TLS 固定用 Windows 自带 schannel 后端，不依赖 OpenSSL DLL）
 - [x] 网络层骨干：`WsCore`（独立线程收发）+ `PacketCodec`（4B 长度编解码）+ 业务层心跳
 - [x] 登录 / 注册 / token 自动登录（`ChatClient` + `LoginDialog`，token 存 QSettings）
 - [x] 主窗口三栏划分 + 左侧工具栏 logo 按钮（双击播放 Baka 音效，依赖 Qt Multimedia）+ 默认头像等静态资源入库
 - [x] 被顶下线：清 token 回登录窗口，先弹通知（`NoticeDialog`）；断线后点登录会先重连
-      （主动退出登录的逻辑已有，但界面入口暂时搁置，等设置页）
+- [x] 设置窗口：账户（可改用户名、邮箱）、Baka（音量、双击 LOGO 播放），登出入口在设置窗口左下角
 - [x] 左侧工具栏（社区图标）+ 左侧通讯录（搜索、好友 / 群列表、账号栏），登录后拉 `show_contacts` / `show_communities`
 - [ ] 自动断线重连、请求队列
 - [ ] 真实头像下载、聊天历史分页 + 实时收发

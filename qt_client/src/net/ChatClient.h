@@ -26,13 +26,17 @@ public:
     bool isConnected() const { return m_connected; }
     int uid() const { return m_uid; }               // 0 = 未登录
     QString username() const { return m_username; }
-    bool hasSavedToken() const;                     // 本地存着 token：连上后会自动登录
+    QString email() const { return m_email; }       // 没绑定邮箱时为空
+    bool hasSavedToken() const;                    // 本地存着 token：连上后会自动登录
 
 public slots:
     // 账号：纯数字按 UID 登录，否则按邮箱登录
     void login(const QString &identity, const QString &password);
     void registerAccount(const QString &nickname, const QString &email, const QString &password);
     void logout();                                  // 退出登录：通知服务端、清本地 token（连接保留）
+    // 改昵称 / 改邮箱：只发请求，结果由 profileChanged / profileChangeFailed 通知
+    void changeName(const QString &name);
+    void changeEmail(const QString &email);
 
 signals:
     void connected();
@@ -46,6 +50,8 @@ signals:
     void authFailed(const QString &message);
     // 已回到未登录状态。kicked = true 表示是被顶下线（账号在别处登录），否则是自己退出
     void loggedOut(bool kicked);
+    void profileChanged();                          // 昵称或邮箱已改成功，username() / email() 是新值
+    void profileChangeFailed(const QString &message);
 
     void envelopeReceived(const chat_proto::Envelope &envelope);      // 上面没消化的消息
 
@@ -57,6 +63,7 @@ private:
     void handleFrame(const QByteArray &payload);
     void handleLoginSuccess(const chat_proto::Envelope &envelope);
     void handleAuthReply(const QString &text);      // 认证在途时收到的 system 文本
+    bool handleProfileReply(const QString &text);   // 改昵称 / 邮箱的回执；是的话返回 true
     void sendHeartbeat();                           // 业务层心跳（服务端没有 WS 自带 ping/pong）
     // 发出认证请求；没连上就先重连，连上后再发
     void sendAuth(Pending pending, const chat_proto::Envelope &envelope);
@@ -75,4 +82,5 @@ private:
     chat_proto::Envelope m_queuedAuth;
     int m_uid = 0;
     QString m_username;
+    QString m_email;
 };

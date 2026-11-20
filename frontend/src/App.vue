@@ -48,14 +48,9 @@ const demoFriends = ref([])
 const demoFriendRequests = ref([])
 const demoGroups = ref([])
 const demoGroupRequests = ref([])
-const demoFiles = ref([])
 const demoCommunityRequests = ref([])
 const demoForm = reactive({ name: '', email: '', note: '', groupName: '', memberUid: '', communityName: '', joinCode: '' })
 const demoSearch = ref('')
-const demoFilesInput = ref(null)
-const resumeFileInput = ref(null)
-const resumeTransferTarget = ref(null)
-const activeTransfer = computed(() => backend.transferOrder.map((id) => backend.transfers[id]).find((task) => task && !task.silent && (!task.ownerUid || Number(task.ownerUid)===Number(backend.uid)) && !['已完成','已取消','失败'].includes(task.status)) || null)
 // 全局传输进度弹窗：静默图片/头像预览不显示，其余上传和下载都显示。
 const transferTasks = computed(() => backend.transferOrder.map((id) => backend.transfers[id]).filter((task) => task && !task.silent && Number(task.ownerUid) === Number(backend.uid)))
 const transferAutoDismissTimers = new Map()
@@ -1101,7 +1096,7 @@ const submitJoinGroup = () => {
 }
 const openSettings = () => { settingsMobileDetail.value=false; settingsOpen.value=true }
 const openProfileSettings = () => { selectedSetting.value='账户'; settingsMobileDetail.value=true; settingsOpen.value=true; profileEditorOpen.value=true }
-const selectSetting = (name) => { selectedSetting.value = name; settingsMobileDetail.value=true; if (!['账户','Baka','文件','外观','语言'].includes(name)) notDeveloped(name) }
+const selectSetting = (name) => { selectedSetting.value = name; settingsMobileDetail.value=true; if (!['账户','Baka','外观','语言'].includes(name)) notDeveloped(name) }
 const handleProfileBackground = (event) => { event.target.value = ''; notDeveloped(t('个人资料背景')) }
 const closeSettings = () => { settingsOpen.value = false; settingsMobileDetail.value=false; profileEditorOpen.value = false; profileBackgroundMenu.value = false }
 const closeProfileEditor = () => { profileEditorOpen.value = false; profileBackgroundMenu.value = false }
@@ -1127,10 +1122,6 @@ const syncBackendState = () => {
   for (const [groupId, requests] of Object.entries(backend.groupRequests)) for (const request of requests) allGroupRequests.push({ ...request, group: backend.contacts.find((item) => item.uid === Number(groupId))?.name || groupId, groupUid: Number(groupId) })
   demoGroupRequests.value = allGroupRequests
   communities.value = backend.communities.map((item) => ({ ...item, mark: item.name.slice(0, 1), color: '#5865f2', icon: '', members: (backend.members[item.id] || []).length, online: 0 }))
-  demoFiles.value = [
-    ...backend.transferOrder.map((id) => backend.transfers[id]).filter((task) => task && !task.silent && (!task.ownerUid || Number(task.ownerUid)===Number(backend.uid)) && !(task.direction==='upload'&&task.status==='已完成')).map((task) => ({ ...task, id: task.localId, size: task.totalSize, type: task.direction, format: task.format || 'FILE' })),
-    ...backend.files.filter((file) => file.type !== 'avatar'),
-  ]
   if (!selectedCommunity.value && communities.value.length) selectedCommunity.value = communities.value[0].name
   if (selectedCommunity.value && !communities.value.some((item) => item.name === selectedCommunity.value)) selectedCommunity.value = communities.value[0]?.name || ''
   const contacts = backend.contacts.map((item) => ({ uid: item.uid, name: item.name, avatar: item.name[0] || '?', kind: item.isGroup ? '群聊' : '好友', online: false, messages: [] }))
@@ -1150,7 +1141,6 @@ watch(() => ({
   groupRequests: Object.fromEntries(Object.entries(backend.groupRequests).map(([id,list]) => [id,list.map((item) => ({...item}))])),
   communityRequests: Object.fromEntries(Object.entries(backend.communityRequests).map(([id,list]) => [id,list.map((item) => ({...item}))])),
   members: Object.fromEntries(Object.entries(backend.members).map(([id,list]) => [id,list.map((item) => ({...item}))])),
-  files: backend.files.map((item) => ({...item})),
   transfers: backend.transferOrder.map((id) => { const task=backend.transfers[id];return task?{id,status:task.status,progress:task.progress,transferred:task.transferred,fileId:task.fileId,url:task.url,error:task.error}:null }),
 }), syncBackendState, { deep: true, immediate: true })
 watch(() => backend.noticeSeq, () => {
@@ -1276,15 +1266,7 @@ const handleDemoGroupRequest = (request, accept) => {if(api.handleGroupRequest(r
 const openDemoFriendChat = (friend) => {const contact=dmContacts.find(item=>Number(item.uid)===Number(friend.uid));if(contact)openDm(contact)}
 const openGroupChat = (group) => { const contact=dmContacts.find(item=>Number(item.uid)===Number(group.uid));if(contact)openDm(contact);api.showGroupMembers(group.uid);api.showGroupRequests(group.uid) }
 const deleteDemoGroup = (group) => {if(window.confirm(t('解散群聊“{0}”？', group.name)))api.groupDelete(group.uid)}
-const selectDemoFiles = () => demoFilesInput.value?.click()
-const addDemoFiles = (event) => {for(const file of Array.from(event.target.files||[]))api.uploadFile(file,false);event.target.value=''}
-const setDemoFileStatus = (file,status) => {const task=backend.transfers[file.localId];if(!task)return;if(status==='已暂停')api.pauseTransfer(task);else if(task.direction==='upload'&&!task.file&&['已中断','等待选择原文件'].includes(task.status)){resumeTransferTarget.value=task;resumeFileInput.value?.click()}else api.resumeTransfer(task)}
-const bindResumeUpload = (event) => {const file=event.target.files?.[0];if(file&&resumeTransferTarget.value)api.bindResumeFile(resumeTransferTarget.value,file);event.target.value='';resumeTransferTarget.value=null}
-const downloadDemoFile = (file) => {const task=backend.transfers[file.localId];if(task?.url){const link=document.createElement('a');link.href=task.url;link.download=task.name||'download';link.rel='noreferrer';document.body.appendChild(link);link.click();link.remove()}else api.downloadFile(file)}
-const toggleFileTransfer = (file) => {if(!file)return;if(['已暂停','已中断','等待选择原文件'].includes(file.status))setDemoFileStatus(file,'继续');else setDemoFileStatus(file,'已暂停')}
-const toggleActiveTransfer = () => toggleFileTransfer(activeTransfer.value)
 const closeTransferProgress = (task) => { if (['已完成','已取消','失败'].includes(task.status)) api.dismissTransfer(task); else api.cancelTransfer(task) }
-const deleteDemoFile = (file) => {const task=backend.transfers[file.localId];if(task){if(['已完成','已取消','失败'].includes(task.status))api.dismissTransfer(task);else api.cancelTransfer(task)}else api.deleteFile(file.fileId||file.id)}
 const handleDemoCommunityRequest = (request,accept) => {const community=currentCommunity.value;if(!community)return;if(api.handleCommunityRequest(community.id,request.uid,accept))setTimeout(()=>api.showCommunityRequests(community.id),200)}
 const inviteFriendToCommunity = (friend) => {
   const community = currentCommunity.value
@@ -1785,7 +1767,6 @@ const confirmAvatarCrop = () => {
         <nav class="settings-nav">
           <button :class="{active:selectedSetting==='账户'}" @click="selectSetting('账户')"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 20v-1.2a7 7 0 0 1 14 0V20z"/></svg>{{ t("账户") }}</button>
           <button :class="{active:selectedSetting==='Baka'}" @click="selectSetting('Baka')"><img class="settings-nav-logo" src="/logo.png" alt="">Baka</button>
-          <button :class="{active:selectedSetting==='文件'}" @click="selectSetting('文件')"><svg viewBox="0 0 24 24"><path d="M6 2h8l6 6v14H6z"/><path d="M14 2v6h6"/></svg>{{ t("文件") }}</button>
           <div class="settings-divider"></div>
           <div class="settings-group-label">体验</div>
           <button :class="{active:selectedSetting==='外观'}" @click="selectSetting('外观')"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18h1.3a2 2 0 0 0 1.5-3.3 1.8 1.8 0 0 1 1.4-3h1.1A3.7 3.7 0 0 0 21 11c0-4.4-4-8-9-8Z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7.5" r="1"/><circle cx="15" cy="8" r="1"/></svg>{{ t("外观") }}</button>
@@ -1816,14 +1797,6 @@ const confirmAvatarCrop = () => {
               <div class="settings-row"><div class="settings-row-copy"><b>{{ t("收到消息时播放") }}</b><small>收到服务器实时推送的消息时播放一次。</small></div><button class="toggle" :class="{on:bakaOnReceive}" @click="bakaOnReceive=!bakaOnReceive"><i></i></button></div>
               <div class="settings-row"><div class="settings-row-copy"><b>{{ t("双击 LOGO 播放") }}</b><small>双击左侧竖栏顶部的 LOGO 播放一次。</small></div><button class="toggle" :class="{on:bakaOnLogo}" @click="bakaOnLogo=!bakaOnLogo"><i></i></button></div>
             </section>
-          </div>
-          <div v-else-if="selectedSetting==='文件'" class="account-settings-content">
-            <section class="account-section"><h1>{{ t("我的文件") }}</h1><p>文件保存在服务器，上传与下载均使用分片传输。</p></section>
-            <input ref="demoFilesInput" class="demo-hidden-input" type="file" multiple @change="addDemoFiles"><input ref="resumeFileInput" class="demo-hidden-input" type="file" @change="bindResumeUpload">
-            <div class="demo-panel-heading"><div><h2>传输与文件列表</h2><p>{{demoFiles.length}} 个文件</p></div><button class="demo-primary-button" @click="selectDemoFiles">＋ 上传文件</button></div>
-            <div class="demo-transfer-card"><div class="demo-transfer-icon">⇅</div><div><b>{{activeTransfer?.name||t('文件传输状态')}}</b><small>{{activeTransfer?`${activeTransfer.status} · ${activeTransfer.progress||0}%`:t('当前没有进行中的传输')}}</small></div><span class="demo-transfer-state"><i :class="{paused:!activeTransfer||activeTransfer.status==='已暂停'}"></i>{{activeTransfer?.status||'空闲'}}</span><button v-if="activeTransfer?.transferId" class="demo-soft-button" @click="toggleActiveTransfer">{{['已暂停','已中断','等待选择原文件'].includes(activeTransfer.status)?t('继续'):t('暂停')}}</button><button v-if="activeTransfer?.transferId" class="demo-icon-action danger" :title="t('取消传输')" @click="api.cancelTransfer(activeTransfer)">×</button></div>
-            <div class="demo-file-list"><article v-for="file in demoFiles" :key="file.id" class="demo-file-row"><div class="demo-file-thumb"><img v-if="file.url&&file.type==='image'" :src="file.url" :alt="file.name"><span v-else class="demo-file-ext" :class="file.format.toLowerCase()">{{file.format}}</span></div><div class="demo-row-copy"><b>{{file.name}}</b><p>{{file.format}} · {{formatFileSize(file.size)}} <span>·</span> {{ t(file.status) }}</p><div class="demo-file-progress"><i :class="{paused:file.status==='已暂停'}" :style="{width:`${file.progress??(file.status==='已完成'?100:0)}%`}"></i></div></div><div class="demo-file-actions"><button v-if="file.status==='已完成'" class="demo-soft-button" @click="downloadDemoFile(file)">{{ t("下载") }}</button><button v-if="file.localId&&file.transferId&&!['已完成','已取消','失败','正在取消'].includes(file.status)" class="demo-soft-button" @click="toggleFileTransfer(file)">{{['已暂停','已中断','等待选择原文件'].includes(file.status)?(file.status==='等待选择原文件'?t('选择原文件续传'):t('继续')):t('暂停')}}</button><button class="demo-icon-action danger" title="删除文件" @click="deleteDemoFile(file)">×</button></div></article><div v-if="!demoFiles.length" class="demo-empty-state">{{ t("还没有文件，上传一个文件开始使用。") }}</div></div>
-            <div class="demo-doc-note"><b>传输操作</b><span>上传初始化 · 文件分片 · 完成校验 · 断点续传 · 下载 · 暂停 / 继续 / 取消 · 文件列表 / 删除</span><small>文件通过 WebSocket 分片传输，并由服务器持久化。</small></div>
           </div>
 
           <div v-else-if="selectedSetting==='语言'" class="account-settings-content">

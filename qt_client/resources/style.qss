@@ -123,6 +123,130 @@ QStatusBar::item {
 #accountSettingsButton:hover {
     background: #2b2b2f;
 }
+/*设置窗口：整张卡片（右边内容区的底色）*/
+#settingsCard {
+    background: #1a1a1e;
+    border: 1px solid #29292d;
+    border-radius: 8px;
+}
+/*设置窗口：左边导航栏，颜色深一档；左侧两个角跟着卡片变圆*/
+#settingsSidebar {
+    background: #121214;
+    border-top-left-radius: 7px;
+    border-bottom-left-radius: 7px;
+}
+#settingsSidebarTitle {
+    color: #949ba4;
+    font-size: 12px;
+    font-weight: 600;
+}
+/*设置窗口：导航按钮，文字靠左*/
+#settingsNavButton, #settingsLogoutButton {
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    padding-left: 10px;
+    text-align: left;
+    color: #b5bac1;
+}
+/*悬停和当前选中的分类*/
+#settingsNavButton:hover, #settingsNavButton:checked {
+    background: #2c2c30;
+    color: #ffffff;
+}
+/*登出按钮：红字，悬停变成红底*/
+#settingsLogoutButton {
+    color: #da373c;
+}
+#settingsLogoutButton:hover {
+    background: #da373c;
+    color: #ffffff;
+}
+/*设置窗口：右上角当前分类的名字*/
+#settingsTitle {
+    color: #f2f3f5;
+    font-size: 16px;
+    font-weight: 600;
+}
+/*设置页面里的小节标题*/
+#settingsHeading {
+    color: #f2f3f5;
+    font-size: 20px;
+    font-weight: 700;
+}
+/*设置页面里的一行*/
+#settingsRow {
+    background: #202024;
+    border: 1px solid #29292d;
+    border-radius: 8px;
+}
+/*一行里的次要文字（项目名、说明）*/
+#settingsRowName {
+    color: #949ba4;
+    font-size: 13px;
+}
+/*一行里的主要文字（值、标题）*/
+#settingsRowValue {
+    color: #f2f3f5;
+    font-weight: 600;
+}
+/*滑动开关：外观全在两张图里（resources/icons/toggle_off.png / toggle_on.png），按钮自己不画任何东西*/
+#toggleSwitch {
+    background: transparent;
+    border: 0;
+    padding: 0;
+}
+/*设置页一行里的灰色小按钮（编辑 / 取消）*/
+#settingsRowButton {
+    background: #303137;
+    border: 0;
+    border-radius: 4px;
+    color: #e3e4e8;
+}
+#settingsRowButton:hover {
+    background: #3a3b42;
+}
+/*保存在等结果时变淡*/
+#primaryButton:disabled {
+    background: #3c4189;
+    color: #9aa0c8;
+}
+/*设置页里的输入框*/
+#settingsInput {
+    background: #17171a;
+    border: 1px solid #29292d;
+    border-radius: 4px;
+    padding: 0 10px;
+    color: #f2f3f5;
+    selection-background-color: #5a65ea;
+}
+#settingsInput:focus {
+    border: 1px solid #5a65ea;
+}
+/*保存结果提示：成功是绿色，失败是红色*/
+#settingsMessage {
+    color: #23a559;
+    font-size: 12px;
+}
+#settingsMessage[error="true"] {
+    color: #da373c;
+}
+/*音量滑块：细槽 + 已走过的部分是主题色 + 白色圆形滑块*/
+#volumeSlider::groove:horizontal {
+    height: 4px;
+    background: #3a3a40;
+    border-radius: 2px;
+}
+#volumeSlider::sub-page:horizontal {
+    background: #5865f2;
+    border-radius: 2px;
+}
+#volumeSlider::handle:horizontal {
+    width: 14px;
+    margin: -5px 0;     /*让滑块比槽高，上下各伸出 5px*/
+    border-radius: 7px;
+    background: #ffffff;
+}
 /*自动登录等待窗口、通知弹窗的卡片（和登录卡片同色）*/
 #loadingCard, #noticeCard {
     background: #222225;

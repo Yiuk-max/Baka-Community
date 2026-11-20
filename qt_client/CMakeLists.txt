@@ -19,9 +19,8 @@ set(CMAKE_AUTORCC ON)
 #     -DCMAKE_PREFIX_PATH=D:/QT/6.11.1/mingw_64 \
 #     -DCMAKE_CXX_COMPILER=D:/QT/Tools/mingw1310_64/bin/g++.exe
 # ---------------------------------------------------------------------------
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Network Multimedia)
-# QWebSocket 需要 Qt WebSockets 模块（用维护工具安装）
-find_package(Qt6 6.5 QUIET COMPONENTS WebSockets)
+# WebSockets（QWebSocket）、Multimedia（提示音）不在 Qt 默认安装里，缺了用维护工具补装
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Network Multimedia WebSockets)
 
 qt_standard_project_setup()
 
@@ -71,6 +70,12 @@ set(APP_SOURCES
     src/ui/Avatar.cpp
     src/ui/ContactPanel.h
     src/ui/ContactPanel.cpp
+    src/ui/SettingsDialog.h
+    src/ui/SettingsDialog.cpp
+    src/ui/AccountSettingsPage.h
+    src/ui/AccountSettingsPage.cpp
+    src/ui/BakaSettingsPage.h
+    src/ui/BakaSettingsPage.cpp
     src/model/Contact.h
     src/ui/ToolRail.h
     src/ui/ToolRail.cpp
@@ -112,6 +117,8 @@ qt_add_resources(baka_client "appImages"
     BASE resources
     FILES resources/icons/badge-256.png
           resources/icons/settings.png
+          resources/icons/toggle_off.png
+          resources/icons/toggle_on.png
           resources/images/logo.png
           resources/images/default_avatar.png
           resources/images/default_group_avatar.png
@@ -133,17 +140,9 @@ target_include_directories(baka_client PRIVATE
 )
 
 target_link_libraries(baka_client PRIVATE
-    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Multimedia
+    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Multimedia Qt6::WebSockets
     ${Protobuf_LIBRARIES}
 )
-
-if(TARGET Qt6::WebSockets)
-    target_link_libraries(baka_client PRIVATE Qt6::WebSockets)
-    target_compile_definitions(baka_client PRIVATE BAKA_HAVE_QT_WEBSOCKETS=1)
-    message(STATUS "Qt WebSockets: 已安装，客户端使用 QWebSocket")
-else()
-    message(STATUS "Qt WebSockets: 未安装，客户端暂用自研 QTcpSocket 实现（待安装后切换）")
-endif()
 
 if(WIN32)
     set_target_properties(baka_client PROPERTIES WIN32_EXECUTABLE ON)

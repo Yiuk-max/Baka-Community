@@ -32,7 +32,6 @@ export const backend = reactive({
   groupMembers: {},
   groupRequests: {},
   communityRequests: {},
-  files: [],
   fileUrls: {},
   transfers: {},
   transferOrder: [],
@@ -253,7 +252,6 @@ async function receive(event, socket) {
     case 'Group_Chat': return liveMessage(message, 'group', message.group_UID)
     case 'Channel_Chat': return liveMessage(message, 'channel', message.group_UID)
     case 'delete_message': return deleteMessageLocal(message.message_id)
-    case 'file_list_response': return fileListResponse(message)
     case 'file_upload_ready': return uploadReady(message)
     case 'file_upload_complete': return uploadComplete(message)
     case 'file_download_ready': return downloadReady(message)
@@ -292,7 +290,6 @@ function loginSuccess(message) {
     showContacts()
     showFriendRequests()
     showCommunities()
-    requestFileList()
   }, 120)
 }
 
@@ -545,7 +542,6 @@ function systemMessage(content) {
   const changedCommunityId = Number(/(?:added to|removed from) community \[(\d+)\]/i.exec(text)?.[1] || 0)
   if (changedCommunityId && Number(backend.activeCommunityId) === changedCommunityId) setTimeout(() => showMembers(changedCommunityId), 200)
   if (/Channel created|Channel deleted|Channel updated/.test(text) && backend.activeCommunityId) setTimeout(() => showChannels(backend.activeCommunityId), 200)
-  if (/File deleted/.test(text)) setTimeout(requestFileList, 150)
   handleTransferError(text)
 }
 
@@ -559,7 +555,7 @@ function clearAccount() {
   pendingAvatarId = 0
   backend.uid = null; backend.name = ''; backend.email = ''; backend.avatarId = 0; backend.contacts = []; backend.communities = []
   backend.activeCommunityId = null; backend.channels = {}; backend.members = {}; backend.conversations = {}; backend.activeKey = ''; backend.unreadConversations = {}
-  backend.friendRequests = []; backend.groupMembers = {}; backend.groupRequests = {}; backend.communityRequests = {}; backend.files = []
+  backend.friendRequests = []; backend.groupMembers = {}; backend.groupRequests = {}; backend.communityRequests = {}
   clearTransportQueues()
   notice(t('已登出'))
 }
@@ -659,13 +655,10 @@ export function changeTheme(theme) { return send({ type: 'change_theme', theme }
 
 const nowClock = () => { const now = new Date(); return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}` }
 
-// 文件协议：保持原文件工作台 DOM，只把数据与按钮切换为真实任务。
+// 文件协议：把服务端的 file_meta 转成前端用的文件对象。
 function normalizeFile(item = {}) {
   return { id: String(item.file_id || ''), fileId: String(item.file_id || ''), name: item.original_name || '文件', format: (item.original_name?.split('.').pop() || 'FILE').toUpperCase(), size: Number(item.size || 0), type: item.type || 'file', status: '已完成', mime: item.mime_type || 'application/octet-stream', createdAt: item.created_at || '', url: '' }
 }
-function fileListResponse(message) { backend.files = (message.files || []).map(normalizeFile) }
-export function requestFileList() { return send({ type: 'file_list_request' }) }
-export function deleteFile(fileId) { return send({ type: 'file_delete', file_id: String(fileId) }) }
 function activePreviewDownloads() {
   return Object.values(backend.transfers).filter((task) => ownsTask(task) && task.silent && !['已完成', '失败', '已取消', '已中断'].includes(task.status)).length
 }
@@ -813,7 +806,6 @@ function uploadComplete(message) {
     if (task.onComplete) task.onComplete(file)
     task.file = null; task.onComplete = null
   }
-  backend.files = [file, ...backend.files.filter((item) => item.fileId !== file.fileId)]
   persistUploads()
 }
 function sendFileMessage(key, file) {
@@ -991,7 +983,7 @@ export const api = {
   addFriend, handleFriend, removeFriend, setFriendRemark, createGroup, joinGroup, groupAdd, groupRemove, groupRename, groupDelete, groupRole, handleGroupRequest,
   createCommunity, joinCommunity, leaveCommunity, deleteCommunity, modifyCommunity, createChannel, deleteChannel, handleCommunityRequest, communityAdd, communityRemove, communityRole,
   changeName, setEmail, setAvatar, changeTheme, ensureFileUrl,
-  uploadFile, downloadFile, pauseTransfer, bindResumeFile, resumeTransfer, cancelTransfer, dismissTransfer, requestFileList, deleteFile,
+  uploadFile, downloadFile, pauseTransfer, bindResumeFile, resumeTransfer, cancelTransfer, dismissTransfer,
   activeConversation,
 }
 

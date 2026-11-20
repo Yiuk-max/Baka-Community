@@ -17,7 +17,8 @@ public:
     explicit MainWindow(ChatClient *client, QWidget *parent = nullptr);
 
 private:
-    void requestLists();                                        // 登录成功后拉联系人和社区
+    void openSettings();                                        // 打开设置窗口
+    void requestLists();                                       // 登录成功后拉联系人和社区
     void handleEnvelope(const chat_proto::Envelope &envelope);  // 业务消息按 type 分给各控件
 
     ChatClient *m_client = nullptr;

@@ -2,6 +2,7 @@
 
 #include "net/ChatClient.h"
 #include "ui/ContactPanel.h"
+#include "ui/SettingsDialog.h"
 #include "ui/SoundPlayer.h"
 #include "ui/ToolRail.h"
 
@@ -37,11 +38,11 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
 
     setCentralWidget(central);
 
-    connect(m_toolRail, &ToolRail::logoDoubleClicked, m_sound, &SoundPlayer::playBaka);
-    // 设置页还没做，先只在状态栏提示（退出登录的入口以后放在设置页里）
-    connect(m_contactPanel, &ContactPanel::settingsClicked, this, [this] {
-        statusBar()->showMessage(tr("设置页还没做"), 5000);
+    // 双击 logo 播放音效，可以在设置 - Baka 里关掉
+    connect(m_toolRail, &ToolRail::logoDoubleClicked, this, [this] {
+        if (m_sound->playOnLogo()) m_sound->playBaka();
     });
+    connect(m_contactPanel, &ContactPanel::settingsClicked, this, &MainWindow::openSettings);
 
     // 聊天页、社区页还没做：点了先只在状态栏提示，做出来之后在这里切换中间页面
     connect(m_contactPanel, &ContactPanel::contactSelected, this, [this](const Contact &contact) {
@@ -70,6 +71,11 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
 
     connect(m_client, &ChatClient::connected, this, [this] { m_contactPanel->setOnline(true); });
 
+    // 在设置里改了昵称：左下角账号栏跟着变
+    connect(m_client, &ChatClient::profileChanged, this, [this] {
+        m_contactPanel->setAccount(m_client->username(), m_client->uid());
+    });
+
     // 状态栏右下角：心跳回执
     m_heartbeatLabel = new QLabel(
         m_client->isConnected() ? tr("心跳：已连接") : tr("心跳：未连接"), this);
@@ -95,6 +101,20 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
 
     // ChatClient 没消化的业务消息都从这里出来，后面按 type 分给各页面
     connect(m_client, &ChatClient::envelopeReceived, this, &MainWindow::handleEnvelope);
+}
+
+void MainWindow::openSettings() {
+    SettingsDialog dialog(m_client->username(), m_client->uid(), m_client->email(), m_sound, this);
+    // 开着设置时被顶下线：先把设置窗口关掉，再让 main.cpp 那边切回登录窗口
+    connect(m_client, &ChatClient::loggedOut, &dialog, &QDialog::reject);
+    // 改昵称 / 邮箱：设置窗口只发信号，请求由 ChatClient 发，结果再回填给窗口
+    connect(&dialog, &SettingsDialog::nameChangeRequested, m_client, &ChatClient::changeName);
+    connect(&dialog, &SettingsDialog::emailChangeRequested, m_client, &ChatClient::changeEmail);
+    connect(m_client, &ChatClient::profileChanged, &dialog, [this, &dialog] {
+        dialog.setProfile(m_client->username(), m_client->email());
+    });
+    connect(m_client, &ChatClient::profileChangeFailed, &dialog, &SettingsDialog::showProfileError);
+    if (dialog.exec() == SettingsDialog::Logout) m_client->logout();
 }
 
 void MainWindow::requestLists() {

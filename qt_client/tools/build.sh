@@ -17,7 +17,7 @@ if [ ! -d "$QT_PREFIX" ]; then
 fi
 
 if [ ! -f "$QT_PREFIX/lib/cmake/Qt6WebSockets/Qt6WebSocketsConfig.cmake" ]; then
-    echo "警告：$QT_PREFIX 里没有 Qt WebSockets 模块，QWebSocket 会编译失败。" >&2
+    echo "警告：$QT_PREFIX 里没有 Qt WebSockets 模块，下面的 cmake 配置会失败。" >&2
     echo "      补装：aqt install-qt linux desktop 6.11.1 linux_gcc_64 -m qtwebsockets -O ~/Qt" >&2
 fi
 

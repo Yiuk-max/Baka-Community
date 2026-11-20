@@ -10,7 +10,6 @@
 #include <QDebug>
 #include <QFile>
 #include <QIcon>
-#include <QSslSocket>
 
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
