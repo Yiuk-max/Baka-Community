@@ -37,6 +37,12 @@ const dmQuickMenu = ref(false)
 const friendRequestModal = ref(false)
 const demoLoginOpen = ref(true)
 const demoAuthMode = ref('登录')
+const demoAuthSubpage = ref('form')
+const pendingVerifyEmail = ref('')
+const pendingVerifyUid = ref('')
+const verifyCode = ref('')
+const verifyCodeCooldown = ref(0)
+let verifyCodeCooldownTimer = null
 const demoSignedIn = ref(false)
 const demoAuth = reactive({ identity: '', password: '', username: '', email: '' })
 const demoUid = ref('')
@@ -1161,6 +1167,13 @@ watch(() => backend.noticeSeq, () => {
   }
   const registered=/注册成功，UID：(\d+)/.exec(notice)
   if (registered) { demoAuth.identity=registered[1];demoAuthMode.value='登录' }
+  const registeredEn=/Registration successful\. You can now log in with UID (\d+)/.exec(notice)
+  if (registeredEn) { pendingVerifyUid.value=registeredEn[1]; demoAuthSubpage.value='verify'; startVerifyCooldown(60) }
+  if (/Email verified successfully/.test(notice)) { demoAuthSubpage.value='form';demoAuthMode.value='登录';verifyCode.value='';pendingVerifyEmail.value='' }
+  if (/Invalid or expired verification code/.test(notice)) { /* notice already shown */ }
+  const cooldownMatch=/Please wait (\d+) seconds before requesting another code/.exec(notice)
+  if (cooldownMatch) { startVerifyCooldown(Number(cooldownMatch[1])) }
+  if (/Verification email sent to/.test(notice)) { startVerifyCooldown(60) }
 })
 watch(profileEditorOpen, (open) => {
   if (!open) return
@@ -1226,6 +1239,7 @@ watch(selectedCommunity, () => { const community=currentCommunity.value;demoComm
 const submitDemoAuth = () => {
   if (demoAuthMode.value === '注册') {
     if (!demoAuth.username.trim() || !demoAuth.email.trim() || !demoAuth.password.trim()) return demoNotice(t('请填写昵称、邮箱和密码'))
+    pendingVerifyEmail.value = demoAuth.email.trim()
     api.register(demoAuth.username.trim(), demoAuth.email.trim(), demoAuth.password)
   } else {
     if (!demoAuth.identity.trim() || !demoAuth.password.trim()) return demoNotice(t('请输入账号和密码'))
@@ -1233,7 +1247,23 @@ const submitDemoAuth = () => {
   }
   demoAuth.password = ''
 }
-const demoLogout = () => { api.logout(); demoAuthMode.value = '登录'; demoAuth.password = ''; demoLoginOpen.value = true }
+const startVerifyCooldown = (seconds) => {
+  if (verifyCodeCooldownTimer) clearInterval(verifyCodeCooldownTimer)
+  verifyCodeCooldown.value = seconds
+  verifyCodeCooldownTimer = setInterval(() => {
+    verifyCodeCooldown.value -= 1
+    if (verifyCodeCooldown.value <= 0) { clearInterval(verifyCodeCooldownTimer); verifyCodeCooldownTimer = null; verifyCodeCooldown.value = 0 }
+  }, 1000)
+}
+const submitVerifyCode = () => {
+  if (!verifyCode.value.trim()) return demoNotice(t('请输入验证码'))
+  api.verifyEmail(verifyCode.value.trim(), pendingVerifyUid.value)
+}
+const resendVerifyCode = () => {
+  if (verifyCodeCooldown.value > 0) return
+  api.resendVerify(pendingVerifyEmail.value)
+}
+const demoLogout = () => { api.logout(); demoAuthMode.value = '登录'; demoAuth.password = ''; demoLoginOpen.value = true; demoAuthSubpage.value = 'form' }
 const requestDemoFriend = () => {
   const email = demoForm.email.trim().toLowerCase()
   if (!email || !email.includes('@')) return demoNotice(t('请输入有效的邮箱地址'))
@@ -1671,15 +1701,26 @@ const confirmAvatarCrop = () => {
     <section class="demo-login-window" role="dialog" aria-modal="true" aria-labelledby="demo-login-title">
       <button v-if="backend.authenticated" class="friend-request-close" :aria-label="t('关闭')" @click="demoLoginOpen=false">×</button>
       <div class="demo-login-logo"><img src="/logo.png" alt="LOGO"></div>
-      <h1 id="demo-login-title">{{backend.reconnecting?t('正在重新连接'):backend.authenticating?t('正在恢复登录'):t('欢迎回来')}}</h1><p>{{backend.reconnecting?t('连接中断，正在自动重连…'):backend.authenticating?t('正在验证登录状态…'):backend.connecting?t('正在连接服务器…'):backend.connected?t('登录账号，继续使用 Baka Community。'):t('服务器连接失败，请稍后重试。')}}</p>
-      <template v-if="!backend.authenticating && !backend.reconnecting">
-        <div class="demo-login-tabs"><button :class="{active:demoAuthMode==='登录'}" @click="demoAuthMode='登录'">{{ t("登录") }}</button><button :class="{active:demoAuthMode==='注册'}" @click="demoAuthMode='注册'">{{ t("注册") }}</button></div>
-        <label v-if="demoAuthMode==='注册'">昵称<input v-model="demoAuth.username" :placeholder="t('例如：小明')"></label>
-        <label v-if="demoAuthMode==='注册'">{{ t("邮箱") }}<input v-model="demoAuth.email" placeholder="name@example.com"></label>
-        <label v-else>{{ t("UID 或邮箱") }}<input v-model="demoAuth.identity" placeholder="100001 / name@example.com"></label>
-        <label>{{ t("密码") }}<input v-model="demoAuth.password" type="password" :placeholder="t('输入密码')" @keydown.enter.prevent="submitDemoLoginWindow"></label>
-        <button class="demo-login-submit" @click="backend.connected?submitDemoLoginWindow():api.connect()">{{backend.connecting?'连接中…':backend.connected?demoAuthMode:'重新连接'}}</button>
-      </template><div v-else class="login-restoring-indicator"><i></i><span>{{t(backend.reconnecting?'正在重新连接…':'自动登录中…')}}</span></div><small>{{ t("数据通过 WebSocket + protobuf 与服务器同步。") }}</small>
+      <template v-if="demoAuthSubpage==='verify'">
+        <h1 id="demo-login-title">{{ t('验证邮箱') }}</h1>
+        <p>{{ t('验证码已发送至') }} <b>{{pendingVerifyEmail}}</b>，{{ t('请查收邮件并输入 6 位验证码。') }}</p>
+        <label>{{ t('验证码') }}<input v-model="verifyCode" maxlength="6" placeholder="000000" inputmode="numeric" @keydown.enter.prevent="submitVerifyCode"></label>
+        <button class="demo-login-submit" @click="submitVerifyCode">{{ t('验证') }}</button>
+        <button class="demo-login-resend" :disabled="verifyCodeCooldown>0" @click="resendVerifyCode">{{verifyCodeCooldown>0?`${t('重新发送')} (${verifyCodeCooldown}s)`:t('重新发送验证码')}}</button>
+        <button class="demo-login-back" @click="demoAuthSubpage='form';demoAuthMode='注册'">{{ t('返回') }}</button>
+      </template>
+      <template v-else>
+        <h1 id="demo-login-title">{{backend.reconnecting?t('正在重新连接'):backend.authenticating?t('正在恢复登录'):t('欢迎回来')}}</h1><p>{{backend.reconnecting?t('连接中断，正在自动重连…'):backend.authenticating?t('正在验证登录状态…'):backend.connecting?t('正在连接服务器…'):backend.connected?t('登录账号，继续使用 Baka Community。'):t('服务器连接失败，请稍后重试。')}}</p>
+        <template v-if="!backend.authenticating && !backend.reconnecting">
+          <div class="demo-login-tabs"><button :class="{active:demoAuthMode==='登录'}" @click="demoAuthMode='登录'">{{ t("登录") }}</button><button :class="{active:demoAuthMode==='注册'}" @click="demoAuthMode='注册'">{{ t("注册") }}</button></div>
+          <label v-if="demoAuthMode==='注册'">昵称<input v-model="demoAuth.username" :placeholder="t('例如：小明')"></label>
+          <label v-if="demoAuthMode==='注册'">{{ t("邮箱") }}<input v-model="demoAuth.email" placeholder="name@example.com"></label>
+          <label v-else>{{ t("UID 或邮箱") }}<input v-model="demoAuth.identity" placeholder="100001 / name@example.com"></label>
+          <label>{{ t("密码") }}<input v-model="demoAuth.password" type="password" :placeholder="t('输入密码')" @keydown.enter.prevent="submitDemoLoginWindow"></label>
+          <button class="demo-login-submit" @click="backend.connected?submitDemoLoginWindow():api.connect()">{{backend.connecting?'连接中…':backend.connected?demoAuthMode:'重新连接'}}</button>
+        </template><div v-else class="login-restoring-indicator"><i></i><span>{{t(backend.reconnecting?'正在重新连接…':'自动登录中…')}}</span></div>
+      </template>
+      <small>{{ t("数据通过 WebSocket + protobuf 与服务器同步。") }}</small>
     </section>
   </div>
   <div v-if="memberProfile" class="member-profile-backdrop" @click.self="memberProfile=null">

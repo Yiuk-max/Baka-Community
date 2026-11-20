@@ -7,6 +7,7 @@
 #include "message_repository.h"
 #include "community_repository.h"
 #include "file_repository.h"
+#include "email_verify_repository.h"
 
 // ============================================================
 // RepositoryHub：仓储门面（Facade / 组合根）
@@ -57,6 +58,10 @@ public:
     std::shared_ptr<I_file_repo> files() const { return file_repo_; }
     void set_file_repo(std::shared_ptr<I_file_repo> repo) { file_repo_ = std::move(repo); }
 
+    // 邮箱验证码仓储（接口），默认已装配 repo 层真实 MySQL 实现
+    std::shared_ptr<I_email_verify_repo> email_verify() const { return email_verify_repo_; }
+    void set_email_verify_repo(std::shared_ptr<I_email_verify_repo> repo) { email_verify_repo_ = std::move(repo); }
+
 private:
     std::shared_ptr<I_account_repo> account_repo_;          // 账户仓储（构造时装配真实 MySQL 实现）
     std::shared_ptr<I_account_email_repo> email_repo_;      // 账户邮箱仓储（构造时装配真实 MySQL 实现）
@@ -65,5 +70,6 @@ private:
     std::shared_ptr<I_message_repo>  message_repo_;         // 消息仓储（构造时装配真实 MySQL 实现）
     std::shared_ptr<I_community_repo> community_repo_;      // 社区仓储（构造时装配真实 MySQL 实现）
     std::shared_ptr<I_file_repo>      file_repo_;           // 文件仓储（构造时装配真实 MySQL 实现）
+    std::shared_ptr<I_email_verify_repo> email_verify_repo_; // 邮箱验证码仓储（构造时装配真实 MySQL 实现）
 };
 

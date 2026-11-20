@@ -566,6 +566,8 @@ export function login(identity, password) {
   return value.includes('@') ? send({ type: 'login', email: value, password }) : send({ type: 'login', UID: Number(value), password })
 }
 export function register(username, email, password) { return send({ type: 'register', username, email, password }) }
+export function verifyEmail(code, uid) { return send({ type: 'verify_email', code, UID: uid ? Number(uid) : 0 }) }
+export function resendVerify(email) { return send({ type: 'resend_verify', email: email || '' }) }
 export function logout() {
   localStorage.removeItem(TOKEN_KEY)
   for (const task of Object.values(backend.transfers)) if (ownsTask(task) && task.transferId && ['上传中','下载中','校验中','正在续传'].includes(task.status)) send({ type: 'file_transfer_pause', transfer_id: Number(task.transferId) })
@@ -984,6 +986,7 @@ export const api = {
   createCommunity, joinCommunity, leaveCommunity, deleteCommunity, modifyCommunity, createChannel, deleteChannel, handleCommunityRequest, communityAdd, communityRemove, communityRole,
   changeName, setEmail, setAvatar, changeTheme, ensureFileUrl,
   uploadFile, downloadFile, pauseTransfer, bindResumeFile, resumeTransfer, cancelTransfer, dismissTransfer,
+  verifyEmail, resendVerify,
   activeConversation,
 }
 

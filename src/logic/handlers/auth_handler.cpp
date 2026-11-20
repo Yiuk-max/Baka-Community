@@ -5,8 +5,10 @@
 #include "repository_hub.h"
 #include "social_module.h"
 #include "group_manager.h"
+#include "email_service.h"
 
 #include <ctime>
+#include <random>
 
 namespace {
 
@@ -88,6 +90,22 @@ void register_user(client_session& s, std::string username, std::string password
     std::string UID = new_account->get_string_UID();
     std::string success = "Registration successful. You can now log in with UID " + UID + " or " + email + ".\n";
     s.package_message(success, "system");
+
+    // 发送注册验证邮件（异步：生成 6 位数字验证码，写库，调 Resend API）
+    // 生成 6 位数字验证码（不用 setw/setfill，直接补零）
+    std::mt19937 rng(static_cast<unsigned>(std::time(nullptr)) ^ static_cast<unsigned>(uid));
+    std::uniform_int_distribution<int> dist(0, 999999);
+    int code_num = dist(rng);
+    char code_buf[7];
+    std::snprintf(code_buf, sizeof(code_buf), "%06d", code_num);
+    const std::string code(code_buf);
+
+    if (s.repo_hub()->email_verify()->save_code(uid, email, code, "register") > 0) {
+        if (!EmailService::get_instance().send_verification(email, username, code)) {
+            // 发信失败不影响注册，记一条日志即可（用户可在登录后重发）
+            std::cerr << "[auth] send_verification failed for uid=" << uid << std::endl;
+        }
+    }
 }
 
 void login(client_session& s, int UID, std::string password) {
@@ -155,6 +173,83 @@ void set_email(client_session& s, std::string email) {
         s.package_message("Email updated successfully. Your email is [" + email + "].\n", "system");
     } else {
         s.package_message("Failed to set email (email may already be used by another account).\n", "system");
+    }
+}
+
+// 重新发送注册验证码（已登录或未登录均可；未登录时需提供 email；60s 冷却，直接查库）
+void resend_verify(client_session& s, const std::string& req_email) {
+    int uid = -1;
+    std::string email;
+    std::string username;
+    auto acc = s.current_account();
+    if (acc) {
+        uid = acc->getUID();
+        email = s.repo_hub()->emails()->get_email(uid);
+        username = acc->getName();
+    } else if (!req_email.empty()) {
+        uid = s.repo_hub()->emails()->find_uid_by_email(req_email);
+        if (uid < 0) {
+            s.package_message("No account is bound to that email.\n", "system");
+            return;
+        }
+        email = req_email;
+        auto loaded = s.repo_hub()->accounts()->load_account(uid);
+        username = loaded ? loaded->getName() : "";
+    } else {
+        s.package_message("You must be logged in or provide your email to request a verification code.\n", "system");
+        return;
+    }
+    if (email.empty()) {
+        s.package_message("No email is bound to your account.\n", "system");
+        return;
+    }
+
+    constexpr int COOLDOWN = 60;
+    const int remaining = s.repo_hub()->email_verify()->seconds_until_cooldown_ends(uid, "register", COOLDOWN);
+    if (remaining > 0) {
+        s.package_message("Please wait " + std::to_string(remaining) +
+                          " seconds before requesting another code.\n", "system");
+        return;
+    }
+
+    std::mt19937 rng(static_cast<unsigned>(std::time(nullptr)) ^ static_cast<unsigned>(uid));
+    std::uniform_int_distribution<int> dist(0, 999999);
+    int code_num = dist(rng);
+    char code_buf[7];
+    std::snprintf(code_buf, sizeof(code_buf), "%06d", code_num);
+    const std::string code(code_buf);
+
+    if (s.repo_hub()->email_verify()->save_code(uid, email, code, "register") == 0) {
+        s.package_message("Failed to save verification code (database unavailable).\n", "system");
+        return;
+    }
+    if (!EmailService::get_instance().send_verification(email, username, code)) {
+        s.package_message("Failed to send verification email, please try again later.\n", "system");
+        return;
+    }
+    s.package_message("Verification email sent to [" + email + "].\n", "system");
+}
+
+// 验证邮箱验证码（已登录或未登录均可；未登录时需提供 UID）
+void verify_email(client_session& s, const std::string& code, int req_uid) {
+    int uid = -1;
+    auto acc = s.current_account();
+    if (acc) {
+        uid = acc->getUID();
+    } else if (req_uid > 0) {
+        uid = req_uid;
+    } else {
+        s.package_message("You must be logged in or provide your UID to verify your email.\n", "system");
+        return;
+    }
+    if (code.empty()) {
+        s.package_message("Verification code cannot be empty.\n", "system");
+        return;
+    }
+    if (s.repo_hub()->email_verify()->consume_code(uid, code, "register")) {
+        s.package_message("Email verified successfully.\n", "system");
+    } else {
+        s.package_message("Invalid or expired verification code.\n", "system");
     }
 }
 
@@ -319,6 +414,12 @@ void Base_handler::handle_message(const chat_proto::Envelope& message, client_se
         return;
     } else if (type == "show_contacts") {
         show_contacts(session);
+        return;
+    } else if (type == "resend_verify") {
+        resend_verify(session, message.email());
+        return;
+    } else if (type == "verify_email") {
+        verify_email(session, message.code(), message.uid());
         return;
     }
 }

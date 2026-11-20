@@ -61,6 +61,11 @@ void ServerConfig::load(const std::string& path) {
             if (f.contains("max_avatar_size"))          file_max_avatar_size_ = f["max_avatar_size"].get<uint64_t>();
             if (f.contains("transfer_timeout_seconds")) file_transfer_timeout_seconds_ = f["transfer_timeout_seconds"].get<int>();
         }
+        // 邮件配置（嵌套于 "email" 对象）
+        if (cfg.contains("email") && cfg["email"].is_object()) {
+            auto& em = cfg["email"];
+            if (em.contains("api_key")) resend_api_key_ = em["api_key"].get<std::string>();
+        }
     } catch (const std::exception& e) {
         std::cerr << "[ServerConfig] parse error: " << e.what()
                   << ", fallback to defaults." << std::endl;
@@ -228,4 +233,9 @@ uint64_t ServerConfig::file_max_avatar_size() const {
 int ServerConfig::file_transfer_timeout_seconds() const {
     std::lock_guard<std::mutex> lock(mtx_);
     return file_transfer_timeout_seconds_;
+}
+
+std::string ServerConfig::resend_api_key() const {
+    std::lock_guard<std::mutex> lock(mtx_);
+    return resend_api_key_;
 }

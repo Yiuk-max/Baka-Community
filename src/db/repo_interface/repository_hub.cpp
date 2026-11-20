@@ -6,6 +6,7 @@
 #include "message_repo.h"   // 组合根：装配真实的 MySQL 消息仓储
 #include "community_repo.h" // 组合根：装配真实的 MySQL 社区仓储
 #include "file_repo.h"      // 组合根：装配真实的 MySQL 文件仓储
+#include "email_verify_repo.h" // 组合根：装配真实的 MySQL 邮箱验证码仓储
 
 // 构造函数：默认给账户/好友/群聊仓储装配真实实现（MySQL）。
 // 组合根（RepositoryHub）是唯一感知具体 repo 实现的位置；
@@ -17,5 +18,6 @@ RepositoryHub::RepositoryHub()
       group_repo_(std::make_shared<group_repo>()),       // 装配真实 MySQL 实现
       message_repo_(std::make_shared<message_repo>()),    // 装配真实 MySQL 实现
       community_repo_(std::make_shared<community_repo>()), // 装配真实 MySQL 实现
-      file_repo_(std::make_shared<file_repo>())            // 装配真实 MySQL 实现
+      file_repo_(std::make_shared<file_repo>()),            // 装配真实 MySQL 实现
+      email_verify_repo_(std::make_shared<email_verify_repo>()) // 装配真实 MySQL 实现
 {}

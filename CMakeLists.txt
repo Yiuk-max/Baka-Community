@@ -20,6 +20,7 @@ find_package(nlohmann_json REQUIRED)
 find_package(Boost 1.74 REQUIRED COMPONENTS system CONFIG)
 find_package(Threads REQUIRED)
 find_package(Protobuf REQUIRED)
+find_package(CURL REQUIRED)      # libcurl（Resend API 发信用）
 
 # ---------------------------------------------------------------------------
 # Redis 缓存：redis-plus-plus（依赖 hiredis）。通过 FetchContent 拉取源码并静态链接，
@@ -81,6 +82,7 @@ target_link_libraries(server PRIVATE mysqlcppconn)
 target_link_libraries(server PRIVATE Boost::system Threads::Threads)
 target_link_libraries(server PRIVATE protobuf::libprotobuf)
 target_link_libraries(server PRIVATE redis++::redis++_static)
+target_link_libraries(server PRIVATE CURL::libcurl)   # libcurl（email_service.cpp）
 
 
 

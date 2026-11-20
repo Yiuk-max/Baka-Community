@@ -36,5 +36,8 @@
         "max_storage_size": 10737418240,
         "max_avatar_size": 10485760,
         "transfer_timeout_seconds": 1800
+    },
+    "email": {
+        "api_key": ""
     }
 }

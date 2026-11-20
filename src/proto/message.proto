@@ -191,4 +191,7 @@ message Envelope {
 
   // 分片下载请求（M4：可中断/续传）
   int32 chunk_index  = 55;  // file_download_chunk 请求的块号
+
+  // 邮箱验证码（verify_email 请求）
+  string code = 56;  // 6 位数字验证码
 }
