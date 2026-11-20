@@ -1,0 +1,63 @@
+name: build-server
+
+# 在 GitHub 的机房机器上编 baka-server，产物作为 artifact 下载回来。
+# 目的：绝不在 2C2G / 零 swap 的 VPS 上做全量 C++ 编译（2026-11-20 整机 hang 32 分钟）。
+on:
+  workflow_dispatch:
+  push:
+    branches: ['**']   # 任意分支可触发，便于先在小分支验证
+    paths:
+      - 'src/**'
+      - 'include/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/build-server.yml'
+
+concurrency:
+  group: build-server-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # 与 VPS 同版本（Ubuntu 24.04 / noble），避免 glibc、boost、protobuf ABI 不一致
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake g++ make git pkg-config \
+            libboost-system-dev \
+            libprotobuf-dev protobuf-compiler \
+            nlohmann-json3-dev \
+            libcurl4-openssl-dev \
+            libmysqlcppconn-dev
+
+      - name: Configure
+        run: |
+          # 独立构建目录：仓库里的 build/ 只用于放产物，不参与 CI
+          cmake -S . -B build-ci -DCMAKE_BUILD_TYPE=Release -DSERVER_BUILD_TESTS=OFF
+
+      - name: Build
+        run: cmake --build build-ci --target server -j 4
+
+      - name: Sanity check
+        run: |
+          ls -lh build-ci/server
+          file build-ci/server
+          echo "--- NEEDED ---"
+          readelf -d build-ci/server | grep NEEDED
+          echo "--- not found (应为空) ---"
+          ldd build-ci/server | grep -i 'not found' || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-ubuntu2404
+          path: build-ci/server
+          if-no-files-found: error
+          retention-days: 14
