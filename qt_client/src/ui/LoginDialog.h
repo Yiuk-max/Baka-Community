@@ -13,6 +13,11 @@ class LoginDialog : public QDialog {
 public:
     explicit LoginDialog(QWidget *parent = nullptr);
 
+    // 网络结果回填：原样转给 LoginPage
+    void setBusy(bool busy);
+    void showError(const QString &message);
+    void showRegistered(const QString &uid, const QString &email);
+
 signals:
     void loginRequested(const QString &identity, const QString &password);
     void registerRequested(const QString &nickname, const QString &email, const QString &password);

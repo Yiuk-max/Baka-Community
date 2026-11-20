@@ -10,14 +10,14 @@
 
 class QWebSocket;
 
-class WsClient : public QObject {
+class WsCore : public QObject {
     Q_OBJECT
 public:
-    explicit WsClient(const QUrl &url, QObject *parent = nullptr);
+    explicit WsCore(const QUrl &url, QObject *parent = nullptr);
 
 public slots:
     void start();                              // 由线程的 started() 触发，在本线程内建 socket 并连接
-    void stop();                               // 关 socket、停心跳定时器（如果上层有）
+    void stop();                               // 关 socket（心跳定时器在上层 ChatClient，由它自己停）
     void sendFrame(const QByteArray &payload); // 发一帧（已带 4 字节长度前缀）
 
 signals:

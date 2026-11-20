@@ -1,6 +1,6 @@
 # Baka Community — Qt 客户端
 
-Baka Community 聊天系统的 **Windows 桌面客户端**（Qt 6.11.1 + MinGW 13.1 + Widgets + C++17）。
+Baka Community 聊天系统的**桌面客户端**（Qt 6.11.1 + Widgets + C++17；主力平台 Windows / MinGW 13.1，Linux 用 `tools/build.sh`）。
 
 > 开发约束（强制）：[`Docs/开发约束.md`](Docs/开发约束.md) —— C++17 + Widgets + 纯 C++ 建 UI + 不用 `.ui` + 每页一个 QWidget + Signal/Slot。
 > 版本库：本工程是后端仓库 `Baka-Community` 内的子目录 `qt_client/`，与 `src/`（后端）、`frontend/`（web）同库。
@@ -23,15 +23,23 @@ Baka Community 聊天系统的 **Windows 桌面客户端**（Qt 6.11.1 + MinGW 1
 ```
 qt_client/
 ├── CMakeLists.txt              # 工程入口（Qt6 + protobuf + proto 自动生成）
+├── config.json                 # 运行配置（server_url），构建时复制到 exe 同目录
 ├── proto/message.proto         # 协议唯一来源，从 ../src/proto/message.proto 同步
+├── resources/                  # style.qss（只放视觉样式）、图标、app.rc
 ├── src/
-│   ├── main.cpp                # schannel TLS 后端 + 入口
-│   └── MainWindow.h/.cpp       # 主窗口（界面骨架，待填充）
-├── tools/build.bat             # 固定工具链的一键构建脚本
+│   ├── main.cpp                # 入口：TLS / QSS / 配置 → ChatClient → 登录窗口 → 主窗口
+│   ├── AppConfig.h/.cpp        # 读 config.json
+│   ├── MainWindow.h/.cpp       # 主窗口（界面骨架，待填充）
+│   ├── net/                    # WsCore（网络线程收发）/ PacketCodec（帧编解码）/ TlsSetup
+│   │                           # ChatClient（业务层网络出口：心跳、登录、注册、token）
+│   └── ui/                     # LoginPage（表单）/ LoginDialog（无边框登录窗口）
+├── tools/build.bat             # Windows：固定工具链的一键构建脚本
+├── tools/build.sh              # Linux / macOS 构建脚本
 ├── Docs/
 │   ├── 开发约束.md              # 【强制】C++17/Widgets/纯代码 UI/QSS 边界/模块交付说明要求
 │   ├── 开发环境.md              # 工具链路径 / protobuf 安装 / TLS 后端 / 构建部署 / 踩坑
-│   └── 客户端开发说明.md         # 协议细节 / 时序 / 分页 / 架构规划
+│   ├── 客户端开发说明.md         # 协议细节 / 时序 / 分页 / 架构规划
+│   └── 模块记录/                # 每个模块的类关系 / API / 调用流程
 └── build/                      # 本工程构建产物（不进版本库）
 ```
 
@@ -65,8 +73,9 @@ cmake --build ./qt_client/build -j4
 - [x] Qt WebSockets 6.11.1 已安装，CMake 自动链接（`BAKA_HAVE_QT_WEBSOCKETS=1`）
 - [x] 生产环境连通性已验证：`wss://bakacomm.world/ws` 握手 + 收发一帧 Envelope
       （TLS 固定用 Windows 自带 schannel 后端，不依赖 OpenSSL DLL）
-- [ ] 网络层（QWebSocket 封装 + 4B 长度编解码 + 请求队列）
-- [ ] 登录 / 注册 / token 自动登录
+- [x] 网络层骨干：`WsCore`（独立线程收发）+ `PacketCodec`（4B 长度编解码）+ 业务层心跳
+- [x] 登录 / 注册 / token 自动登录（`ChatClient` + `LoginDialog`，token 存 QSettings）
+- [ ] 断线重连、请求队列
 - [ ] 会话列表 + 聊天历史分页 + 实时收发
 - [ ] 群聊 / 社区频道 / 好友 / 文件传输
 

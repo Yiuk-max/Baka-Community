@@ -1,7 +1,7 @@
 #pragma once
 
 // 登录 / 注册页：复刻 web 端 .demo-login-window（同一张卡片里切换两种表单）。
-// 只做界面与输入校验；提交时发信号，网络层还没接。
+// 只做界面与输入校验；提交时发信号，结果由上层通过 setBusy / showError / showRegistered 回填。
 #include <QWidget>
 
 class QLabel;
@@ -13,6 +13,11 @@ class LoginPage : public QWidget {
     Q_OBJECT
 public:
     explicit LoginPage(QWidget *parent = nullptr);
+
+    void setBusy(bool busy);                    // 请求在途：禁用提交按钮，防止重复提交
+    void showError(const QString &message);     // 显示失败原因，并解除 busy
+    // 注册成功：切回登录表单并把 UID 填好（注册不建立登录态，还要再登录一次）
+    void showRegistered(const QString &uid, const QString &email);
 
 signals:
     // 账号：UID 或邮箱，原样交给上层判断

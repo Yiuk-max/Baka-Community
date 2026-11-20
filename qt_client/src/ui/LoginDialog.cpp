@@ -6,7 +6,6 @@
 #include <QMouseEvent>
 #include <QPushButton>
 #include <QVBoxLayout>
-#include <QVBoxLayout>
 
 LoginDialog::LoginDialog(QWidget *parent) : QDialog(parent) {
     // 无标题栏 + 背景透明（卡片自己画圆角，圆角外面透出桌面）
@@ -41,6 +40,14 @@ LoginDialog::LoginDialog(QWidget *parent) : QDialog(parent) {
     connect(m_page, &LoginPage::loginRequested, this, &LoginDialog::loginRequested);
     connect(m_page, &LoginPage::registerRequested, this, &LoginDialog::registerRequested);
 
+}
+
+void LoginDialog::setBusy(bool busy) { m_page->setBusy(busy); }
+
+void LoginDialog::showError(const QString &message) { m_page->showError(message); }
+
+void LoginDialog::showRegistered(const QString &uid, const QString &email) {
+    m_page->showRegistered(uid, email);
 }
 
 void LoginDialog::mousePressEvent(QMouseEvent *event) {

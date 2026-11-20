@@ -173,7 +173,31 @@ void LoginPage::switchMode() {
     m_error->hide();
 }
 
+void LoginPage::setBusy(bool busy) {
+    const bool isLogin = m_forms->currentIndex() == 0;
+    m_submit->setEnabled(!busy);
+    m_switch->setEnabled(!busy);
+    m_submit->setText(busy ? tr("请稍候…") : (isLogin ? tr("登录") : tr("注册")));
+}
+
+void LoginPage::showError(const QString &message) {
+    setBusy(false);
+    m_error->setText(message);
+    m_error->show();
+}
+
+void LoginPage::showRegistered(const QString &uid, const QString &email) {
+    Q_UNUSED(email);//告诉编译器某个变量虽然没有被使用，但这是有意为之，不需要警告
+    setBusy(false);
+    if (m_forms->currentIndex() == 1) switchMode();
+    m_subtitle->setText(tr("注册成功，你的 UID 是 %1，请登录").arg(uid));
+    m_identity->setText(uid);
+    m_password->clear();
+    m_password->setFocus();
+}
+
 void LoginPage::submitLogin() {
+    if (!m_submit->isEnabled()) return; // 请求在途时回车不重复提交
     const QString identity = m_identity->text().trimmed();
     const QString password = m_password->text();
     if (identity.isEmpty() || password.isEmpty()) {
@@ -186,6 +210,7 @@ void LoginPage::submitLogin() {
 }
 
 void LoginPage::submitRegister() {
+    if (!m_submit->isEnabled()) return;
     const QString nickname = m_regNickname->text().trimmed();
     const QString email = m_regEmail->text().trimmed();
     const QString password = m_regPassword->text();

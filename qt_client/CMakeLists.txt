@@ -62,8 +62,10 @@ set(APP_SOURCES
     src/ui/LoginDialog.cpp
     src/net/PacketCodec.h
     src/net/PacketCodec.cpp
-    src/net/WsClient.h
-    src/net/WsClient.cpp
+    src/net/WsCore.h
+    src/net/WsCore.cpp
+    src/net/ChatClient.h
+    src/net/ChatClient.cpp
     src/net/TlsSetup.h
     src/net/TlsSetup.cpp
     ${PROTO_SRCS}

@@ -1,5 +1,6 @@
 #include "AppConfig.h"
 #include "MainWindow.h"
+#include "net/ChatClient.h"
 #include "net/TlsSetup.h"
 #include "ui/LoginDialog.h"
 
@@ -12,7 +13,7 @@
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
 
-    app.setApplicationName(QStringLiteral("Baka commuity"));
+    app.setApplicationName(QStringLiteral("Baka Community"));
     app.setOrganizationName(QStringLiteral("Baka Community"));
     // 窗口/任务栏图标（与 exe 里的 app.ico 同一张图）
     app.setWindowIcon(QIcon(QStringLiteral(":/icons/badge-256.png")));
@@ -32,13 +33,27 @@ int main(int argc, char *argv[]) {
     // 启动时读JSON配置文件
     const appconfig::Config config = appconfig::load();
 
-    // 登录/注册暂不接入：先直接进主界面测网络，下面三行接认证时再启用
-    // 创建登录页，exec事件循环，阻塞主页，不登录不允许打开
-    
-    // LoginDialog loginDialog;
-    // if (loginDialog.exec() != QDialog::Accepted) return 0;
+    // 网络出口：登录窗口和主窗口共用同一条连接，所以放在两者之前创建
+    ChatClient client(config.serverUrl);
 
-    MainWindow window(config.serverUrl);
+    // 主窗口先建好但不显示：登录成功后服务端会紧跟着推好友申请、离线消息，得有人接着
+    MainWindow window(&client);
+    client.start();
+
+    // 创建登录页，exec事件循环，阻塞主页，不登录不允许打开
+    LoginDialog loginDialog;
+    QObject::connect(&loginDialog, &LoginDialog::loginRequested, &client, &ChatClient::login);
+    QObject::connect(&loginDialog, &LoginDialog::registerRequested, &client,
+                     &ChatClient::registerAccount);
+    QObject::connect(&client, &ChatClient::authStarted, &loginDialog,
+                     [&loginDialog] { loginDialog.setBusy(true); });
+    QObject::connect(&client, &ChatClient::authFailed, &loginDialog, &LoginDialog::showError);
+    QObject::connect(&client, &ChatClient::registerSucceeded, &loginDialog,
+                     &LoginDialog::showRegistered);
+    // 本地有 token 时会自动登录，成功后同样走这里直接关掉登录窗口
+    QObject::connect(&client, &ChatClient::loginSucceeded, &loginDialog, &LoginDialog::accept);
+    if (loginDialog.exec() != QDialog::Accepted) return 0;
+
     window.show();
     return app.exec();
 }
