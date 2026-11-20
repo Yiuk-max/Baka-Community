@@ -67,6 +67,11 @@ set(APP_SOURCES
     src/ui/Spinner.h
     src/ui/Spinner.cpp
     src/ui/Assets.h
+    src/ui/Avatar.h
+    src/ui/Avatar.cpp
+    src/ui/ContactPanel.h
+    src/ui/ContactPanel.cpp
+    src/model/Contact.h
     src/ui/ToolRail.h
     src/ui/ToolRail.cpp
     src/ui/SoundPlayer.h
@@ -106,6 +111,7 @@ qt_add_resources(baka_client "appImages"
     PREFIX "/"
     BASE resources
     FILES resources/icons/badge-256.png
+          resources/icons/settings.png
           resources/images/logo.png
           resources/images/default_avatar.png
           resources/images/default_group_avatar.png

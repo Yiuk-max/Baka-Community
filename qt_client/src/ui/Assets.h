@@ -11,6 +11,8 @@ inline QString defaultAvatar() { return QStringLiteral(":/images/default_avatar.
 inline QString defaultGroupAvatar() { return QStringLiteral(":/images/default_group_avatar.png"); }
 inline QString defaultCommunityAvatar() { return QStringLiteral(":/images/default_comm_avatar.png"); }
 inline QString defaultBackground() { return QStringLiteral(":/images/default_background.png"); }
+// 设置按钮的齿轮图标
+inline QString settingsIcon() { return QStringLiteral(":/icons/settings.png"); }
 // QMediaPlayer 要的是 URL 形式
 inline QString bakaSoundUrl() { return QStringLiteral("qrc:/audio/baka.mp3"); }
 

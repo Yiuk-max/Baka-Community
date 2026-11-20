@@ -33,11 +33,14 @@ int main(int argc, char *argv[]) {
         app.setStyleSheet(QString::fromUtf8(styleFile.readAll()));
     }
     // 启动时读JSON配置文件
-    const appconfig::Config config = appconfig::load();    // 网络出口：登录窗口和主窗口共用同一条连接，所以放在两者之前创建
+    const appconfig::Config config = appconfig::load();
+
+    // 网络出口：登录窗口和主窗口共用同一条连接，所以放在两者之前创建
     ChatClient client(config.serverUrl);
 
     // 主窗口先建好但不显示：登录成功后服务端会紧跟着推好友申请、离线消息，得有人接着
-    MainWindow window(&client);    client.start();
+    MainWindow window(&client);
+    client.start();
 
     // 创建登录页，exec事件循环，阻塞主页，不登录不允许打开
     LoginDialog loginDialog;

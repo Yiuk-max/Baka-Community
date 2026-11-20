@@ -33,18 +33,95 @@ QStatusBar::item {
     background: #5865f2;
     border-radius: 24px;
 }
-/*工具栏底部的退出登录按钮*/
-#railLogoutButton {
+/*工具栏：logo 下面的分隔线*/
+#railDivider {
+    background: #2c2c30;
+    border: 0;
+}
+/*工具栏：社区图标的滚动区，自己不画背景，透出工具栏的底色*/
+#railCommunityArea, #railCommunityList {
+    background: transparent;
+    border: 0;
+}
+/*工具栏：社区图标按钮（图标本身已经裁成圆角）*/
+#railCommunityButton {
     background: transparent;
     border: 0;
     border-radius: 16px;
+}
+/*通讯录：搜索框*/
+#contactSearch {
+    background: #17171a;
+    border: 1px solid #17171a;
+    border-radius: 8px;
+    padding: 0 10px;    /*文字离左右边框的距离*/
+    color: #b5bac1;
+    selection-background-color: #5a65ea;
+}
+#contactSearch:focus {
+    border: 1px solid #5a65ea;
+}
+/*通讯录：“私信”小标题*/
+#contactHeading {
+    color: #949ba4;
+    font-size: 12px;
+    font-weight: 600;
+}
+/*通讯录：好友 / 群列表*/
+#contactList {
+    background: transparent;
+    border: 0;
+    outline: 0;
+    font-size: 15px;
+}
+#contactList::item {
+    border-radius: 8px;
+    padding-left: 8px;  /*头像离行左边的距离*/
+    color: #949ba4;
+}
+/*悬停和选中：行变亮*/
+#contactList::item:hover, #contactList::item:selected {
+    background: #2c2c30;
+    color: #ffffff;
+}
+/*通讯录：列表的滚动条，细一点、和深色背景协调*/
+#contactList QScrollBar:vertical {
+    background: transparent;
+    width: 6px;
+}
+#contactList QScrollBar::handle:vertical {
+    background: #3a3a40;
+    border-radius: 3px;
+    min-height: 24px;
+}
+#contactList QScrollBar::add-line:vertical, #contactList QScrollBar::sub-line:vertical,
+#contactList QScrollBar::add-page:vertical, #contactList QScrollBar::sub-page:vertical {
+    background: transparent;
+    height: 0;
+}
+/*通讯录：底部账号栏*/
+#accountBar {
+    background: #202024;
+    border: 1px solid #252529;
+    border-radius: 8px;
+}
+#accountName {
+    color: #f2f3f5;
+    font-weight: 600;
+}
+#accountStatus {
     color: #949ba4;
     font-size: 12px;
 }
-/*悬停时变红，提示这是退出*/
-#railLogoutButton:hover {
-    background: #da373c;
-    color: #ffffff;
+/*通讯录：账号栏右侧的设置按钮（齿轮是图片 resources/icons/settings.png）*/
+#accountSettingsButton {
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+}
+/*悬停时底色变亮*/
+#accountSettingsButton:hover {
+    background: #2b2b2f;
 }
 /*自动登录等待窗口、通知弹窗的卡片（和登录卡片同色）*/
 #loadingCard, #noticeCard {

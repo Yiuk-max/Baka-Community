@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 
 #include "net/ChatClient.h"
+#include "ui/ContactPanel.h"
 #include "ui/SoundPlayer.h"
 #include "ui/ToolRail.h"
 
@@ -26,12 +27,10 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
     m_toolRail = new ToolRail(central);
     layout->addWidget(m_toolRail);
 
-    // 通讯录、中间页面还没做，先各放一个空控件占位（到时候换成各自的 QWidget 子类）
-    m_contactPanel = new QWidget(central);
-    m_contactPanel->setObjectName("contactPanel");
-    m_contactPanel->setFixedWidth(240);   // web 端 --sidebar-w
+    m_contactPanel = new ContactPanel(central);
     layout->addWidget(m_contactPanel);
 
+    // 中间页面还没做，先放一个空控件占位（到时候换成自己的 QWidget 子类）
     m_centerPage = new QWidget(central);
     m_centerPage->setObjectName("centerPage");
     layout->addWidget(m_centerPage, 1);   // 伸展因子1，剩余宽度全给中间
@@ -39,14 +38,37 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
     setCentralWidget(central);
 
     connect(m_toolRail, &ToolRail::logoDoubleClicked, m_sound, &SoundPlayer::playBaka);
-    connect(m_toolRail, &ToolRail::logoutClicked, m_client, &ChatClient::logout);
+    // 设置页还没做，先只在状态栏提示（退出登录的入口以后放在设置页里）
+    connect(m_contactPanel, &ContactPanel::settingsClicked, this, [this] {
+        statusBar()->showMessage(tr("设置页还没做"), 5000);
+    });
+
+    // 聊天页、社区页还没做：点了先只在状态栏提示，做出来之后在这里切换中间页面
+    connect(m_contactPanel, &ContactPanel::contactSelected, this, [this](const Contact &contact) {
+        statusBar()->showMessage(tr("已选中%1「%2」（聊天页还没做）")
+                                     .arg(contact.isGroup ? tr("群聊") : tr("好友"), contact.name), 5000);
+    });
+    connect(m_toolRail, &ToolRail::communityClicked, this, [this](const Community &community) {
+        statusBar()->showMessage(tr("社区「%1」（社区页还没做）").arg(community.name), 5000);
+    });
 
     connect(m_client, &ChatClient::loginSucceeded, this, [this] {
         statusBar()->showMessage(tr("已登录 %1（UID %2）/ 服务器 %3")
                                      .arg(m_client->username())
                                      .arg(m_client->uid())
                                      .arg(m_client->serverUrl()));
+        m_contactPanel->setAccount(m_client->username(), m_client->uid());
+        m_contactPanel->setOnline(true);
+        requestLists();
     });
+
+    // 退出登录 / 被顶下线：上一个账号的联系人和社区不能留给下一个账号看到
+    connect(m_client, &ChatClient::loggedOut, this, [this] {
+        m_contactPanel->clear();
+        m_toolRail->setCommunities({});
+    });
+
+    connect(m_client, &ChatClient::connected, this, [this] { m_contactPanel->setOnline(true); });
 
     // 状态栏右下角：心跳回执
     m_heartbeatLabel = new QLabel(
@@ -60,6 +82,7 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
 
     connect(m_client, &ChatClient::disconnected, this, [this](const QString &reason) {
         m_heartbeatLabel->setText(tr("心跳：断开（%1）").arg(reason));
+        m_contactPanel->setOnline(false);
     });
 
     connect(m_client, &ChatClient::heartbeatAcked, this,
@@ -71,9 +94,49 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
     });
 
     // ChatClient 没消化的业务消息都从这里出来，后面按 type 分给各页面
-    connect(m_client, &ChatClient::envelopeReceived, this,
-            [this](const chat_proto::Envelope &envelope) {
-        statusBar()->showMessage(
-            tr("收到 %1 类型消息（暂未处理）").arg(QString::fromStdString(envelope.type())), 5000);
-    });
+    connect(m_client, &ChatClient::envelopeReceived, this, &MainWindow::handleEnvelope);
+}
+
+void MainWindow::requestLists() {
+    chat_proto::Envelope contacts;
+    contacts.set_type("show_contacts");
+    m_client->send(contacts);
+
+    chat_proto::Envelope communities;
+    communities.set_type("show_communities");
+    m_client->send(communities);
+}
+
+void MainWindow::handleEnvelope(const chat_proto::Envelope &envelope) {
+    const QString type = QString::fromStdString(envelope.type());
+
+    if (type == QStringLiteral("contact_list_response")) {
+        QList<Contact> contacts;
+        for (const chat_proto::ContactInfo &info : envelope.contacts()) {
+            Contact contact;
+            contact.uid = info.uid();
+            contact.name = QString::fromStdString(info.name());
+            if (contact.name.isEmpty()) contact.name = QString::number(contact.uid);
+            contact.isGroup = info.is_group();
+            contact.avatarId = info.avatar_id();
+            contacts.append(contact);
+        }
+        m_contactPanel->setContacts(contacts);
+        return;
+    }
+
+    if (type == QStringLiteral("community_list_response")) {
+        QList<Community> communities;
+        for (const chat_proto::CommunityInfo &info : envelope.communities()) {
+            Community community;
+            community.id = info.community_id();
+            community.name = QString::fromStdString(info.name());
+            community.avatarId = info.avatar_id();
+            communities.append(community);
+        }
+        m_toolRail->setCommunities(communities);
+        return;
+    }
+
+    statusBar()->showMessage(tr("收到 %1 类型消息（暂未处理）").arg(type), 5000);
 }

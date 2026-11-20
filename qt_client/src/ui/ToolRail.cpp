@@ -1,10 +1,13 @@
 #include "ToolRail.h"
 
 #include "Assets.h"
+#include "Avatar.h"
 
 #include <QEvent>
+#include <QFrame>
 #include <QIcon>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QVBoxLayout>
 
 ToolRail::ToolRail(QWidget *parent) : QWidget(parent) {
@@ -27,18 +30,52 @@ ToolRail::ToolRail(QWidget *parent) : QWidget(parent) {
     m_logoButton->installEventFilter(this);             // 事件过滤器获取双击信号
     m_layout->addWidget(m_logoButton, 0, Qt::AlignHCenter);//水平居中对齐
 
-    m_layout->addStretch();   // 以后的按钮插在弹簧上面
+    // 分隔线：把 logo 和下面的社区图标隔开
+    auto *divider = new QFrame;
+    divider->setObjectName("railDivider");
+    divider->setFixedSize(32, 2);
+    m_layout->addWidget(divider, 0, Qt::AlignHCenter);
 
-    // 退出登录按钮，固定在工具栏最底部（以后有设置页了可以挪进去）
-    m_logoutButton = new QPushButton(tr("退出"));
-    m_logoutButton->setObjectName("railLogoutButton");
-    m_logoutButton->setFixedSize(48, 48);
-    m_logoutButton->setCursor(Qt::PointingHandCursor);
-    m_logoutButton->setToolTip(tr("退出登录"));
-    m_layout->addWidget(m_logoutButton, 0, Qt::AlignHCenter);
+    // 社区图标区：占掉中间所有剩余高度，社区多了就在里面滚动（不显示滚动条，用滚轮）
+    auto *scroll = new QScrollArea;
+    scroll->setObjectName("railCommunityArea");
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setWidgetResizable(true);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto *communityList = new QWidget;
+    communityList->setObjectName("railCommunityList");
+    m_communityLayout = new QVBoxLayout(communityList);
+    m_communityLayout->setContentsMargins(0, 0, 0, 0);
+    m_communityLayout->setSpacing(8);
+    m_communityLayout->addStretch();   // 图标插在弹簧上面，始终从顶部往下排
+    scroll->setWidget(communityList);
+    m_layout->addWidget(scroll, 1);
 
     connect(m_logoButton, &QPushButton::clicked, this, &ToolRail::homeClicked);
-    connect(m_logoutButton, &QPushButton::clicked, this, &ToolRail::logoutClicked);
+}
+
+void ToolRail::setCommunities(const QList<Community> &communities) {
+    qDeleteAll(m_communityButtons);
+    m_communityButtons.clear();
+
+    // 还没做头像下载，所有社区先用同一张默认社区头像（圆角和 logo 按钮一致）
+    const QIcon icon = avatar::roundedIcon(assets::defaultCommunityAvatar(), 48, 16);
+    for (const Community &community : communities) {
+        auto *button = new QPushButton;
+        button->setObjectName("railCommunityButton");
+        button->setFixedSize(48, 48);
+        button->setIcon(icon);
+        button->setIconSize(QSize(48, 48));
+        button->setCursor(Qt::PointingHandCursor);
+        button->setToolTip(community.name);
+        connect(button, &QPushButton::clicked, this,
+                [this, community] { emit communityClicked(community); });
+
+        // 插在末尾的弹簧之前
+        m_communityLayout->insertWidget(m_communityLayout->count() - 1, button, 0, Qt::AlignHCenter);
+        m_communityButtons.append(button);
+    }
 }
 
 bool ToolRail::eventFilter(QObject *watched, QEvent *event) {
