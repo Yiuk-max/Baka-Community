@@ -76,6 +76,8 @@ void client_session::init_(){
     handlers_["set_avatar"]             = std::make_unique<Base_handler>();// 设置头像(file.id)
     handlers_["set_email"]              = std::make_unique<Base_handler>();// 绑定/换绑邮箱
     handlers_["verify_token"]           = std::make_unique<Base_handler>();// 用 token 自动登录
+    handlers_["resend_verify"]          = std::make_unique<Base_handler>();// 重发邮箱验证码（auth_handler 已有分支，之前没注册 → 客户端一调就 Unknown command type）
+    handlers_["verify_email"]          = std::make_unique<Base_handler>();// 提交邮箱验证码
     //群聊相关
     handlers_["create_group"]           = std::make_unique<Group_handler>();
     handlers_["group_add_client"]       = std::make_unique<Group_handler>();
