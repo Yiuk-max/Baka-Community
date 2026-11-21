@@ -112,6 +112,10 @@ set(APP_SOURCES
     src/net/ChatClient.cpp
     src/net/TlsSetup.h
     src/net/TlsSetup.cpp
+    src/net/FileDownloader.h
+    src/net/FileDownloader.cpp
+    src/store/AvatarStore.h
+    src/store/AvatarStore.cpp
     ${PROTO_SRCS}
 )
 

@@ -21,11 +21,11 @@ MessageRow::MessageRow(const Message &msg, QWidget *parent) : QWidget(parent), m
     layout->setContentsMargins(16, 3, 16, 3);
     layout->setSpacing(12);
 
-    // 头像（暂无真实头像，统一用默认图）
-    auto *avatarLabel = new QLabel(this);
-    avatarLabel->setFixedSize(36, 36);
-    avatarLabel->setPixmap(avatar::rounded(assets::defaultAvatar(), 36, 18));
-    layout->addWidget(avatarLabel, 0, Qt::AlignTop);
+    // 头像：先放默认图，ChatPage 建完这一行会用 setAvatar 换成发送者的本地头像
+    m_avatar = new QLabel(this);
+    m_avatar->setFixedSize(36, 36);
+    m_avatar->setPixmap(avatar::user(QString(), 36));
+    layout->addWidget(m_avatar, 0, Qt::AlignTop);
 
     // 右侧内容区
     auto *cLayout = new QVBoxLayout;
@@ -150,6 +150,10 @@ void MessageRow::confirm(int realId) {
     m_text->setObjectName("msgText");
     m_text->style()->unpolish(m_text);
     m_text->style()->polish(m_text);
+}
+
+void MessageRow::setAvatar(const QString &path) {
+    m_avatar->setPixmap(avatar::user(path, 36));
 }
 
 void MessageRow::contextMenuEvent(QContextMenuEvent *event) {

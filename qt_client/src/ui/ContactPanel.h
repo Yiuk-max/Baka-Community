@@ -20,6 +20,7 @@ public:
 
     void setContacts(const QList<Contact> &contacts);   // 整份替换列表，尽量保留原来的选中项
     void setAccount(const QString &name, int uid);      // 底部账号栏：当前登录的账号
+    void setAccountAvatar(const QString &path);         // 底部账号栏：自己的头像文件；空 = 默认头像
     void setOnline(bool online);                        // 底部账号栏：在线 / 离线
     void clear();                                       // 退出登录时清空
     void select(const Contact &contact);                // 从别处（主页）打开了会话：把这一行标成选中，不发信号
@@ -37,11 +38,12 @@ private:
 
     QLineEdit *m_search = nullptr;
     QListWidget *m_list = nullptr;
+    QLabel *m_accountAvatar = nullptr;
     QLabel *m_accountName = nullptr;
     QLabel *m_accountStatus = nullptr;
 
     QList<Contact> m_contacts;
-    // 还没做头像下载，好友 / 群各用一张默认头像，所以只生成一次
+    // 好友有本地头像文件就用它（Contact::avatarPath），没有的好友共用默认头像；群还没有头像，统一用默认群头像
     QIcon m_userIcon;
     QIcon m_groupIcon;
     // 当前选中项，用 (isGroup, uid) 识别：好友 UID 和群 id 是两套编号，可能撞

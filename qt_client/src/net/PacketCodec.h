@@ -16,6 +16,7 @@ namespace packetcodec {
 QByteArray encode(const chat_proto::Envelope &envelope);
 
 // 4 字节长度前缀 + protobuf 字节 -> Envelope；长度不符或解析失败返回 false
-bool decode(const QByteArray &payload, chat_proto::Envelope &envelope);
+// 文件分片（file_chunk）的帧在 protobuf 后面还跟着文件数据，传了 fileData 就把这部分放进去
+bool decode(const QByteArray &payload, chat_proto::Envelope &envelope, QByteArray *fileData = nullptr);
 
 } // namespace packetcodec

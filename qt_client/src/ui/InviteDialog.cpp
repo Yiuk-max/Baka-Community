@@ -47,13 +47,12 @@ InviteDialog::InviteDialog(const QString &title, const QList<Contact> &friends, 
     rows->setContentsMargins(0, 0, 0, 0);
     rows->setSpacing(0);
 
-    const QPixmap avatarPixmap = avatar::rounded(assets::defaultAvatar(), 32, 16);
     for (const Contact &contact : friends) {
         auto *row = new QHBoxLayout;
         row->setContentsMargins(0, 8, 8, 8);
         row->setSpacing(12);
         auto *avatarLabel = new QLabel;
-        avatarLabel->setPixmap(avatarPixmap);
+        avatarLabel->setPixmap(avatar::user(contact.avatarPath, 32));
         row->addWidget(avatarLabel);
         auto *nameLabel = new QLabel(contact.name);
         nameLabel->setObjectName("settingsRowValue");

@@ -6,6 +6,7 @@
 namespace chat_proto {
 class Envelope;
 }
+class AvatarStore;
 class ChatClient;
 class ChatPage;
 class ContactPanel;
@@ -42,11 +43,13 @@ private:
     void requestCommunityRequests();                            // 拉自己是所有者的社区的入社区申请
     bool handleJoinRequestList(const QString &text);            // 上面两个请求的文本回复；是的话返回 true
     void handleJoinDecision(const JoinRequest &request, bool accept);   // “待定”页点了 接受 / 拒绝
+    void refreshAvatar(int uid);                                // uid 的本地头像文件变了：刷新账号栏 / 通讯录 / 主页
 
     QList<Contact>   m_contacts;      // 最近一次拉到的好友 + 群（邀请弹窗、申请列表里的群名要用）
     QList<Community> m_communities;
 
     ChatClient   *m_client       = nullptr;
+    AvatarStore  *m_avatars      = nullptr;   // 用户头像的本地存储（本地没有或过期时自动下载）
     SoundPlayer  *m_sound        = nullptr;
     ToolRail     *m_toolRail     = nullptr;
     ContactPanel *m_contactPanel = nullptr;

@@ -175,7 +175,7 @@ QVBoxLayout *HomePage::addSection(QVBoxLayout *column, const QString &title, con
 }
 
 // 一行：头像 + 名字（+ 右侧的 ›）。整行是一个按钮，悬停变色和点击都由按钮自己负责
-QPushButton *HomePage::makeRow(const QString &avatarPath, const QString &name, bool showArrow) {
+QPushButton *HomePage::makeRow(const QPixmap &avatarPixmap, const QString &name, bool showArrow) {
     auto *row = new QPushButton;
     row->setObjectName("homeRow");
     row->setFixedHeight(kRowHeight);
@@ -186,7 +186,7 @@ QPushButton *HomePage::makeRow(const QString &avatarPath, const QString &name, b
     layout->setSpacing(12);
 
     auto *avatarLabel = new QLabel;
-    avatarLabel->setPixmap(avatar::rounded(avatarPath, kAvatarSize, kAvatarSize / 2));
+    avatarLabel->setPixmap(avatarPixmap);
     avatarLabel->setAttribute(Qt::WA_TransparentForMouseEvents);   // 鼠标事件交给整行按钮
     layout->addWidget(avatarLabel);
 
@@ -233,9 +233,10 @@ void HomePage::rebuildContacts() {
         if (!contact.isGroup && !keyword.isEmpty()
                 && !contact.name.contains(keyword, Qt::CaseInsensitive)) continue;
 
+        // 好友：有本地头像文件就用它，没有是默认头像；群还没有头像
         QPushButton *row = contact.isGroup
-            ? makeRow(assets::defaultGroupAvatar(), contact.name, true)
-            : makeRow(assets::defaultAvatar(), contact.name, false);
+            ? makeRow(avatar::rounded(assets::defaultGroupAvatar(), kAvatarSize, kAvatarSize / 2), contact.name, true)
+            : makeRow(avatar::user(contact.avatarPath, kAvatarSize), contact.name, false);
         connect(row, &QPushButton::clicked, this, [this, contact] { emit contactActivated(contact); });
         if (contact.isGroup) {
             m_groupRows->addWidget(row);
@@ -251,7 +252,8 @@ void HomePage::rebuildContacts() {
 void HomePage::rebuildCommunities() {
     clearRows(m_communityRows);
     for (const Community &community : m_communities) {
-        QPushButton *row = makeRow(assets::defaultCommunityAvatar(), community.name, true);
+        QPushButton *row = makeRow(
+            avatar::rounded(assets::defaultCommunityAvatar(), kAvatarSize, kAvatarSize / 2), community.name, true);
         connect(row, &QPushButton::clicked, this,
                 [this, community] { emit communityActivated(community); });
         m_communityRows->addWidget(row);

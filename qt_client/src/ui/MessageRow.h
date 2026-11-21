@@ -17,6 +17,8 @@ public:
     const Message &message() const { return m_msg; }
     // 乐观消息得到服务端确认：换成真实 id，正文从灰色变成正常颜色
     void confirm(int realId);
+    // 换成本地头像文件；path 为空就是默认头像
+    void setAvatar(const QString &path);
 
 signals:
     void menuRequested(const QPoint &globalPos);
@@ -29,5 +31,6 @@ private:
     QToolButton *makeDownloadButton(QWidget *parent, const char *objectName);   // 下载按钮（目前占位）
 
     Message m_msg;
+    QLabel *m_avatar = nullptr;
     QLabel *m_text = nullptr;       // 文件消息没有正文，这时是 nullptr
 };

@@ -65,9 +65,9 @@ ContactPanel::ContactPanel(QWidget *parent) : QWidget(parent) {
     accountLayout->setContentsMargins(10, 0, 10, 0);
     accountLayout->setSpacing(10);
 
-    auto *accountAvatar = new QLabel;
-    accountAvatar->setPixmap(avatar::rounded(assets::defaultAvatar(), kAvatarSize, kAvatarSize / 2));
-    accountLayout->addWidget(accountAvatar);
+    m_accountAvatar = new QLabel;
+    m_accountAvatar->setPixmap(avatar::user(QString(), kAvatarSize));
+    accountLayout->addWidget(m_accountAvatar);
 
     auto *accountText = new QVBoxLayout;
     accountText->setSpacing(1);
@@ -125,6 +125,10 @@ void ContactPanel::setAccount(const QString &name, int uid) {
     m_accountName->setToolTip(tr("%1（UID %2）").arg(name).arg(uid));
 }
 
+void ContactPanel::setAccountAvatar(const QString &path) {
+    m_accountAvatar->setPixmap(avatar::user(path, kAvatarSize));
+}
+
 void ContactPanel::setOnline(bool online) {
     m_accountStatus->setText(online ? tr("在线") : tr("离线"));
 }
@@ -133,6 +137,7 @@ void ContactPanel::clear() {
     m_hasSelection = false;
     m_search->clear();
     m_accountName->clear();
+    setAccountAvatar(QString());
     setContacts({});
 }
 
@@ -159,7 +164,10 @@ void ContactPanel::rebuildList() {
         const Contact &contact = m_contacts.at(i);
         if (!keyword.isEmpty() && !contact.name.contains(keyword, Qt::CaseInsensitive)) continue;
 
-        auto *item = new QListWidgetItem(contact.isGroup ? m_groupIcon : m_userIcon, contact.name);
+        const QIcon icon = contact.isGroup ? m_groupIcon
+                         : contact.avatarPath.isEmpty() ? m_userIcon
+                         : avatar::userIcon(contact.avatarPath, kAvatarSize);
+        auto *item = new QListWidgetItem(icon, contact.name);
         item->setData(Qt::UserRole, i);   // 记下它在 m_contacts 里的下标
         item->setSizeHint(QSize(0, kRowHeight));
         item->setToolTip(contact.isGroup ? tr("%1（群 %2）").arg(contact.name).arg(contact.uid)

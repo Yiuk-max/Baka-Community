@@ -3,11 +3,29 @@
 #include "MainWindow.h"
 
 #include "net/ChatClient.h"
+#include "store/AvatarStore.h"
+#include "ui/ContactPanel.h"
 #include "ui/HomePage.h"
 #include "ui/InviteDialog.h"
 #include "ui/PendingPage.h"
 
 #include <QRegularExpression>
+
+// 某个人的头像下好了 / 换了 / 被清除了（聊天页里的消息行由 ChatPage 自己刷新）
+void MainWindow::refreshAvatar(int uid) {
+    const QString path = m_avatars->path(uid);
+    if (uid == m_client->uid()) m_contactPanel->setAccountAvatar(path);
+
+    bool isFriend = false;
+    for (Contact &contact : m_contacts) {
+        if (contact.isGroup || contact.uid != uid) continue;
+        contact.avatarPath = path;
+        isFriend = true;
+    }
+    if (!isFriend) return;
+    m_contactPanel->setContacts(m_contacts);
+    m_homePage->setContacts(m_contacts);
+}
 
 // 邀请好友：弹好友列表，点哪个好友的“邀请”就发一次请求（群聊 group_add_client / 社区 community_add_member）
 void MainWindow::inviteFriends(const QString &title, bool toCommunity, int targetId) {

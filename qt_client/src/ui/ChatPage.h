@@ -9,6 +9,7 @@
 #include <QWidget>
 
 namespace chat_proto { class Envelope; }
+class AvatarStore;
 class ChatClient;
 class Composer;
 class MessageRow;
@@ -22,7 +23,8 @@ class QVBoxLayout;
 class ChatPage : public QWidget {
     Q_OBJECT
 public:
-    explicit ChatPage(ChatClient *client, QWidget *parent = nullptr);
+    // avatars：消息行的头像从它那里取本地文件，头像下好后跟着刷新
+    explicit ChatPage(ChatClient *client, AvatarStore *avatars, QWidget *parent = nullptr);
 
     // 切换到某个会话并立刻拉取首页历史
     void openConversation(const Contact &contact, int selfUid);
@@ -45,6 +47,7 @@ private:
     bool isAtBottom() const;
 
     ChatClient  *m_client       = nullptr;
+    AvatarStore *m_avatars      = nullptr;
     int          m_selfUid      = 0;
     Contact      m_conv;
     bool         m_loaded       = false;

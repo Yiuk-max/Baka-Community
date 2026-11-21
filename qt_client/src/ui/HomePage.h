@@ -36,7 +36,7 @@ private:
     QWidget *buildAllPage();
     // 往 column 里加一个小节（标题 + 说明），返回用来放这一节各行的布局
     QVBoxLayout *addSection(QVBoxLayout *column, const QString &title, const QString &hint);
-    QPushButton *makeRow(const QString &avatarPath, const QString &name, bool showArrow);
+    QPushButton *makeRow(const QPixmap &avatarPixmap, const QString &name, bool showArrow);
     void rebuildContacts();      // 按 m_contacts + 搜索关键字重建好友行和群聊行
     void rebuildCommunities();
 

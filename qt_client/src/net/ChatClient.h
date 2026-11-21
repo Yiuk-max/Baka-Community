@@ -27,6 +27,7 @@ public:
     int uid() const { return m_uid; }               // 0 = 未登录
     QString username() const { return m_username; }
     QString email() const { return m_email; }       // 没绑定邮箱时为空
+    int avatarId() const { return m_avatarId; }     // 自己头像的 file.id；<= 0 表示没设置
     bool hasSavedToken() const;                    // 本地存着 token：连上后会自动登录
 
 public slots:
@@ -54,6 +55,8 @@ signals:
     void profileChangeFailed(const QString &message);
 
     void envelopeReceived(const chat_proto::Envelope &envelope);      // 上面没消化的消息
+    // 文件下载的两种回复（file_download_ready / file_chunk）；fileData 是分片带的文件数据
+    void fileFrameReceived(const chat_proto::Envelope &envelope, const QByteArray &fileData);
 
 private:
     enum class Pending { None, Login, Register, Token };
@@ -83,4 +86,5 @@ private:
     int m_uid = 0;
     QString m_username;
     QString m_email;
+    int m_avatarId = 0;
 };

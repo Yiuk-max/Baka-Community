@@ -195,12 +195,17 @@ void ChatClient::onDisconnected(const QString &reason) {
 
 void ChatClient::handleFrame(const QByteArray &payload) {
     chat_proto::Envelope envelope;
-    if (!packetcodec::decode(payload, envelope)) {
+    QByteArray fileData;
+    if (!packetcodec::decode(payload, envelope, &fileData)) {
         emit statusMessage(tr("收到无法解析的帧（%1 字节）").arg(payload.size()));
         return;
     }
 
     const QString type = QString::fromStdString(envelope.type());
+    if (type == QStringLiteral("file_download_ready") || type == QStringLiteral("file_chunk")) {
+        emit fileFrameReceived(envelope, fileData);
+        return;
+    }
     if (type == QStringLiteral("heartbeat_ack")) {
         const qint64 elapsed = QDateTime::currentMSecsSinceEpoch() - m_heartbeatSentAtMs;
         emit heartbeatAcked(QString::fromStdString(envelope.content()), elapsed);
@@ -237,6 +242,7 @@ void ChatClient::handleLoginSuccess(const chat_proto::Envelope &envelope) {
     m_uid = envelope.user().id();
     m_username = QString::fromStdString(envelope.user().username());
     m_email = QString::fromStdString(envelope.email());
+    m_avatarId = envelope.avatar_id();
     QSettings().setValue(QLatin1String(kTokenKey), QString::fromStdString(envelope.token()));
     emit loginSucceeded();
 }
@@ -302,5 +308,6 @@ void ChatClient::clearSession() {
     m_uid = 0;
     m_username.clear();
     m_email.clear();
+    m_avatarId = 0;
     QSettings().remove(QLatin1String(kTokenKey));
 }

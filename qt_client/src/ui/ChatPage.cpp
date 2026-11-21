@@ -1,6 +1,7 @@
 #include "ChatPage.h"
 
 #include "net/ChatClient.h"
+#include "store/AvatarStore.h"
 #include "ui/Assets.h"
 #include "ui/Avatar.h"
 #include "ui/Composer.h"
@@ -30,9 +31,16 @@ static void fillFile(Message &msg, bool isFile, int fileId, const std::string &n
     msg.fileSize = size;
 }
 
-ChatPage::ChatPage(ChatClient *client, QWidget *parent)
-    : QWidget(parent), m_client(client)
+ChatPage::ChatPage(ChatClient *client, AvatarStore *avatars, QWidget *parent)
+    : QWidget(parent), m_client(client), m_avatars(avatars)
 {
+    // 某个人的头像下好了 / 换了：把他已经显示出来的消息行的头像换掉
+    connect(m_avatars, &AvatarStore::avatarChanged, this, [this](int uid) {
+        for (MessageRow *row : std::as_const(m_rows)) {
+            if (row->message().senderUid == uid) row->setAvatar(m_avatars->path(uid));
+        }
+    });
+
     setObjectName("chatPage");
     auto *mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0, 0, 0, 0);
@@ -358,6 +366,7 @@ void ChatPage::appendMessages(const QList<Message> &msgs, bool prepend) {
 // 一条消息一个 MessageRow（长什么样在 MessageRow.cpp）；这里只登记它并接上右键菜单
 MessageRow *ChatPage::buildMessageWidget(const Message &msg) {
     auto *row = new MessageRow(msg, m_msgContainer);
+    row->setAvatar(m_avatars->path(msg.senderUid));   // 本地没有这个人的头像时是默认图
     m_rows.insert(msg.messageId, row);
     if (msg.isOptimistic) m_pendingIds.append(msg.messageId);
     // 排队连接 + QPointer：菜单开着的时候这一行可能被撤回删掉，不能在它自己的事件处理里弹菜单

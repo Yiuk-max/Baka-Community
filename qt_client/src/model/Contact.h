@@ -10,6 +10,7 @@ struct Contact {
     QString name;           // 好友昵称 / 备注名，或群名
     bool isGroup = false;
     int avatarId = 0;       // 头像 file.id；<= 0 表示没设置（群恒为 0）
+    QString avatarPath;     // 本地头像文件（MainWindow 从 AvatarStore 填）；空 = 用默认头像
 };
 
 // 工具栏上的一个社区图标（对应 proto 的 CommunityInfo）

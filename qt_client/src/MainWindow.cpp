@@ -1,6 +1,8 @@
 #include "MainWindow.h"
 
 #include "net/ChatClient.h"
+#include "net/FileDownloader.h"
+#include "store/AvatarStore.h"
 #include "ui/ChatPage.h"
 #include "ui/ContactPanel.h"
 #include "ui/HomePage.h"
@@ -24,6 +26,8 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
     resize(1100, 700);
 
     m_sound = new SoundPlayer(this);
+    m_avatars = new AvatarStore(new FileDownloader(m_client, this), this);
+    connect(m_avatars, &AvatarStore::avatarChanged, this, &MainWindow::refreshAvatar);
 
     // 主界面横向分三块：左侧工具栏 | 左侧通讯录 | 中间页面，水平布局
     auto *central = new QWidget(this);
@@ -40,7 +44,7 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
     // 中间区域：主页和聊天页叠在一起，同一时刻只显示一个
     m_center = new QStackedWidget(central);
     m_homePage = new HomePage(m_center);
-    m_chatPage = new ChatPage(m_client, m_center);
+    m_chatPage = new ChatPage(m_client, m_avatars, m_center);
     m_center->addWidget(m_homePage);
     m_center->addWidget(m_chatPage);
     layout->addWidget(m_center, 1);   // 伸展因子1，剩余宽度全给中间
@@ -92,6 +96,10 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
                                      .arg(m_client->serverUrl()));
         m_contactPanel->setAccount(m_client->username(), m_client->uid());
         m_contactPanel->setOnline(true);
+        // 切到这个账号的本地文件夹，先核对自己的头像
+        m_avatars->setUser(m_client->uid());
+        m_avatars->ensure(m_client->uid(), m_client->avatarId());
+        m_contactPanel->setAccountAvatar(m_avatars->path(m_client->uid()));
         requestLists();
     });
 
@@ -103,6 +111,7 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
         m_contacts.clear();
         m_communities.clear();
         m_chatPage->clear();
+        m_avatars->setUser(0);
         m_center->setCurrentWidget(m_homePage);
     });
 
@@ -321,6 +330,11 @@ void MainWindow::handleEnvelope(const chat_proto::Envelope &envelope) {
             if (contact.name.isEmpty()) contact.name = QString::number(contact.uid);
             contact.isGroup = info.is_group();
             contact.avatarId = info.avatar_id();
+            // 好友头像：本地的 file.id 和这里给的不一样（或本地没有）就重新下载。群没有头像
+            if (!contact.isGroup) {
+                m_avatars->ensure(contact.uid, contact.avatarId);
+                contact.avatarPath = m_avatars->path(contact.uid);   // 还没下好时是空的，下好后 refreshAvatar 会补上
+            }
             contacts.append(contact);
         }
         m_contactPanel->setContacts(contacts);
