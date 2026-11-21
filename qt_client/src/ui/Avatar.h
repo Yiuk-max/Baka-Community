@@ -1,6 +1,6 @@
 #pragma once
 
-// 头像图片处理：把一张图裁成圆角方形（radius 取边长的一半就是圆形）。
+// 头像图片处理：把一张图裁成圆角方形（radius 取边长的一半就是圆形）
 #include <QIcon>
 #include <QPixmap>
 #include <QString>
@@ -13,4 +13,4 @@ QPixmap rounded(const QString &path, int size, int radius);
 // 同上，包成 QIcon 给列表项 / 按钮用
 QIcon roundedIcon(const QString &path, int size, int radius);
 
-} // namespace avatar
+}

@@ -120,6 +120,19 @@ void ContactPanel::clear() {
     setContacts({});
 }
 
+void ContactPanel::select(const Contact &contact) {
+    m_hasSelection = true;
+    m_selectedIsGroup = contact.isGroup;
+    m_selectedUid = contact.uid;
+    rebuildList();   // 重建时会按上面三个值恢复选中，且不发信号
+}
+
+void ContactPanel::clearSelection() {
+    m_hasSelection = false;
+    const QSignalBlocker blocker(m_list);
+    m_list->setCurrentRow(-1);
+}
+
 void ContactPanel::rebuildList() {
     // 重建期间不发 currentRowChanged：这不是用户点的，不能当成“选中了某人”
     const QSignalBlocker blocker(m_list);

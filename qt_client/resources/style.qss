@@ -353,3 +353,290 @@ Spinner {
     color: #f2f3f5;
     text-decoration: underline;
 }
+
+/* ---- 聊天页 ---- */
+/*中间聊天页背景*/
+#chatPage {
+    background: #1a1a1e;
+}
+/*顶部会话标题栏*/
+#chatHeader {
+    background: #1a1a1e;
+    border-bottom: 1px solid #252529;
+    color: #f2f3f5;
+    font-size: 15px;
+    font-weight: 600;
+    padding: 0 16px;
+    min-height: 48px;
+    max-height: 48px;
+}
+/*消息滚动区*/
+#chatScroll, #msgContainer {
+    background: #1a1a1e;
+    border: 0;
+}
+#chatScroll QScrollBar:vertical {
+    background: transparent;
+    width: 6px;
+}
+#chatScroll QScrollBar::handle:vertical {
+    background: #3a3a40;
+    border-radius: 3px;
+    min-height: 24px;
+}
+#chatScroll QScrollBar::add-line:vertical, #chatScroll QScrollBar::sub-line:vertical,
+#chatScroll QScrollBar::add-page:vertical, #chatScroll QScrollBar::sub-page:vertical {
+    background: transparent;
+    height: 0;
+}
+/*消息行*/
+#messageRow {
+    background: transparent;
+}
+#messageRow:hover {
+    background: #1f1f23;
+}
+/*发送者名字*/
+#msgName {
+    color: #f2f3f5;
+    font-weight: 600;
+    font-size: 14px;
+}
+#msgSelfName {
+    color: #7289da;
+    font-weight: 600;
+    font-size: 14px;
+}
+/*时间戳*/
+#msgTime {
+    color: #72767d;
+    font-size: 11px;
+}
+/*消息正文*/
+#msgText {
+    color: #dcddde;
+    font-size: 14px;
+}
+/*乐观消息（待确认）：稍微变淡*/
+#msgTextPending {
+    color: #72767d;
+    font-size: 14px;
+}
+/*回复引用块*/
+#msgQuote {
+    color: #949ba4;
+    font-size: 13px;
+    border-left: 3px solid #4f545c;
+    padding-left: 8px;
+}
+/*底部输入框外层（只留边距，底色和聊天页一样）*/
+#composerOuter {
+    background: #1a1a1e;
+}
+/*圆角盒子（web 端 .composer）*/
+#composerInner {
+    background: #202126;
+    border-radius: 8px;
+}
+/*输入框本体（嵌在圆角盒子里，自己透明、无边框）*/
+#composerInput {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    color: #f2f3f5;
+    font-size: 15px;
+    placeholder-text-color: #80848e;
+    selection-background-color: #5a65ea;
+}
+#composerInput:disabled {
+    color: #80848e;
+}
+/*工具按钮（＋ 和表情）：都是 Unicode 字符，悬停时变亮，不加底色*/
+#composerToolBtn {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    color: #b5bac1;
+    font-size: 20px;
+}
+#composerToolBtn:hover {
+    color: #f2f3f5;
+}
+#composerToolBtn:disabled {
+    color: #4f545c;
+}
+
+/* ---- 表情面板（web 端 App.vue 里的 .emoji-panel） ---- */
+#emojiPanel {
+    background: #2b2d31;
+    border: 1px solid #1e1f22;
+    border-radius: 8px;
+}
+/*分类标签行：下面一条分隔线*/
+#emojiTabRow {
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid #1e1f22;
+}
+#emojiTab {
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    padding: 0;
+    font-family: "Segoe UI Emoji";
+    font-size: 18px;
+}
+#emojiTab:hover {
+    background: #35373c;
+}
+/*当前分类：主题色底*/
+#emojiTab:checked {
+    background: #5865f2;
+}
+/*表情滚动区和里面的网格都透明，透出面板底色*/
+#emojiScroll, #emojiGrid {
+    background: transparent;
+    border: 0;
+}
+#emojiScroll QScrollBar:vertical {
+    background: #1b1c20;
+    width: 12px;
+    margin: 0;
+}
+#emojiScroll QScrollBar::handle:vertical {
+    background: #606168;
+    border: 2px solid #1b1c20;
+    border-radius: 6px;
+    min-height: 56px;
+}
+#emojiScroll QScrollBar::handle:vertical:hover {
+    background: #73757e;
+}
+#emojiScroll QScrollBar::add-line:vertical, #emojiScroll QScrollBar::sub-line:vertical,
+#emojiScroll QScrollBar::add-page:vertical, #emojiScroll QScrollBar::sub-page:vertical {
+    background: transparent;
+    height: 0;
+}
+#emojiButton {
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    padding: 0;
+    font-family: "Segoe UI Emoji";
+    font-size: 24px;
+}
+#emojiButton:hover {
+    background: #35373c;
+}
+
+/* ---- 主页（好友页，web 端 .friends-main） ---- */
+#homePage, #homeScroll, #homeContainer {
+    background: #1a1a1e;
+    border: 0;
+}
+/*顶部标题栏：下面一条分隔线*/
+#homeHeader {
+    background: #1a1a1e;
+    border: 0;
+    border-bottom: 1px solid #252529;
+}
+#homeTitle {
+    color: #f2f3f5;
+    font-size: 16px;
+    font-weight: 700;
+}
+/*标题和标签之间的竖线*/
+#homeHeaderDivider {
+    background: #252529;
+    border: 0;
+}
+/*全部 / 待定*/
+#homeTab {
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    padding: 0 10px;
+    color: #b5bac1;
+    font-size: 15px;
+    font-weight: 500;
+}
+#homeTab:hover, #homeTab:checked {
+    background: #2c2c30;
+    color: #f2f3f5;
+}
+/*搜索好友*/
+#homeSearch {
+    background: #17171a;
+    border: 1px solid #232326;
+    border-radius: 8px;
+    padding: 0 12px;
+    color: #f2f3f5;
+    font-size: 15px;
+    selection-background-color: #5a65ea;
+}
+#homeSearch:focus {
+    border: 1px solid #5a65ea;
+}
+/*“全部 — N”*/
+#homeHeading {
+    color: #f2f3f5;
+    font-size: 16px;
+    font-weight: 700;
+}
+/*“群聊”“社区”小节标题和下面的说明*/
+#homeSubHeading {
+    color: #f2f3f5;
+    font-size: 14px;
+    font-weight: 700;
+}
+#homeHint, #homeEmpty {
+    color: #949ba4;
+    font-size: 12.5px;
+}
+/*“＋ 新建群聊”*/
+#homeLinkButton {
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    padding: 0 12px;
+    color: #b5bac1;
+    font-size: 13.5px;
+}
+#homeLinkButton:hover {
+    background: #2c2c30;
+    color: #f2f3f5;
+}
+/*好友 / 群聊 / 社区的一行（整行是按钮）*/
+#homeRow {
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+}
+#homeRow:hover {
+    background: #222225;
+}
+#homeRowName {
+    background: transparent;
+    color: #f2f3f5;
+    font-size: 15px;
+    font-weight: 600;
+}
+#homeRowArrow {
+    background: transparent;
+    color: #949ba4;
+    font-size: 16px;
+}
+#homeScroll QScrollBar:vertical {
+    background: transparent;
+    width: 6px;
+}
+#homeScroll QScrollBar::handle:vertical {
+    background: #3a3a40;
+    border-radius: 3px;
+    min-height: 24px;
+}
+#homeScroll QScrollBar::add-line:vertical, #homeScroll QScrollBar::sub-line:vertical,
+#homeScroll QScrollBar::add-page:vertical, #homeScroll QScrollBar::sub-page:vertical {
+    background: transparent;
+    height: 0;
+}

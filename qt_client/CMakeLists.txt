@@ -20,7 +20,8 @@ set(CMAKE_AUTORCC ON)
 #     -DCMAKE_CXX_COMPILER=D:/QT/Tools/mingw1310_64/bin/g++.exe
 # ---------------------------------------------------------------------------
 # WebSockets（QWebSocket）、Multimedia（提示音）不在 Qt 默认安装里，缺了用维护工具补装
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Network Multimedia WebSockets)
+# Sql（QSqlDatabase）是 Qt 默认安装自带的，SQLite 驱动是插件 plugins/sqldrivers/qsqlite.dll，不用另装 sqlite
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Network Multimedia WebSockets Sql)
 
 qt_standard_project_setup()
 
@@ -77,10 +78,20 @@ set(APP_SOURCES
     src/ui/BakaSettingsPage.h
     src/ui/BakaSettingsPage.cpp
     src/model/Contact.h
+    src/model/Message.h
+    src/util/TimeFormat.h
     src/ui/ToolRail.h
     src/ui/ToolRail.cpp
     src/ui/SoundPlayer.h
     src/ui/SoundPlayer.cpp
+    src/ui/ChatPage.h
+    src/ui/ChatPage.cpp
+    src/ui/Composer.h
+    src/ui/Composer.cpp
+    src/ui/EmojiPanel.h
+    src/ui/EmojiPanel.cpp
+    src/ui/HomePage.h
+    src/ui/HomePage.cpp
     src/net/PacketCodec.h
     src/net/PacketCodec.cpp
     src/net/WsCore.h
@@ -140,7 +151,7 @@ target_include_directories(baka_client PRIVATE
 )
 
 target_link_libraries(baka_client PRIVATE
-    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Multimedia Qt6::WebSockets
+    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Multimedia Qt6::WebSockets Qt6::Sql
     ${Protobuf_LIBRARIES}
 )
 

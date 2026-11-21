@@ -1,8 +1,8 @@
 #pragma once
 
 // 主窗口左侧的通讯录：
-//   搜索框 / “私信”标题 / 好友和群的列表 / 底部账号栏（含设置按钮）。
-// 只负责显示和发信号，数据由 MainWindow 喂进来。
+//   搜索框 / “私信”标题 / 好友和群的列表 / 底部账号栏
+// 只负责显示和发信号，数据由 MainWindow 喂进来
 #include "model/Contact.h"
 
 #include <QIcon>
@@ -22,6 +22,8 @@ public:
     void setAccount(const QString &name, int uid);      // 底部账号栏：当前登录的账号
     void setOnline(bool online);                        // 底部账号栏：在线 / 离线
     void clear();                                       // 退出登录时清空
+    void select(const Contact &contact);                // 从别处（主页）打开了会话：把这一行标成选中，不发信号
+    void clearSelection();                              // 回到主页时取消选中，这样再点同一行还能打开会话
 
 signals:
     void contactSelected(const Contact &contact);       // 用户点了某个好友 / 群

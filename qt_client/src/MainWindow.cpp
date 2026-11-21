@@ -1,13 +1,16 @@
 #include "MainWindow.h"
 
 #include "net/ChatClient.h"
+#include "ui/ChatPage.h"
 #include "ui/ContactPanel.h"
+#include "ui/HomePage.h"
 #include "ui/SettingsDialog.h"
 #include "ui/SoundPlayer.h"
 #include "ui/ToolRail.h"
 
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QStackedWidget>
 #include <QStatusBar>
 #include <QTime>
 #include <QWidget>
@@ -31,10 +34,13 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
     m_contactPanel = new ContactPanel(central);
     layout->addWidget(m_contactPanel);
 
-    // 中间页面还没做，先放一个空控件占位（到时候换成自己的 QWidget 子类）
-    m_centerPage = new QWidget(central);
-    m_centerPage->setObjectName("centerPage");
-    layout->addWidget(m_centerPage, 1);   // 伸展因子1，剩余宽度全给中间
+    // 中间区域：主页和聊天页叠在一起，同一时刻只显示一个
+    m_center = new QStackedWidget(central);
+    m_homePage = new HomePage(m_center);
+    m_chatPage = new ChatPage(m_client, m_center);
+    m_center->addWidget(m_homePage);
+    m_center->addWidget(m_chatPage);
+    layout->addWidget(m_center, 1);   // 伸展因子1，剩余宽度全给中间
 
     setCentralWidget(central);
 
@@ -42,16 +48,25 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
     connect(m_toolRail, &ToolRail::logoDoubleClicked, this, [this] {
         if (m_sound->playOnLogo()) m_sound->playBaka();
     });
+    // 单击 logo：回到主页
+    connect(m_toolRail, &ToolRail::homeClicked, this, &MainWindow::showHome);
     connect(m_contactPanel, &ContactPanel::settingsClicked, this, &MainWindow::openSettings);
 
-    // 聊天页、社区页还没做：点了先只在状态栏提示，做出来之后在这里切换中间页面
-    connect(m_contactPanel, &ContactPanel::contactSelected, this, [this](const Contact &contact) {
-        statusBar()->showMessage(tr("已选中%1「%2」（聊天页还没做）")
-                                     .arg(contact.isGroup ? tr("群聊") : tr("好友"), contact.name), 5000);
+    // 点选联系人：打开对应的聊天页
+    connect(m_contactPanel, &ContactPanel::contactSelected, this, &MainWindow::openChat);
+    // 在主页点好友 / 群：同样打开聊天页，并让左侧通讯录跟着选中
+    connect(m_homePage, &HomePage::contactActivated, this, [this](const Contact &contact) {
+        m_contactPanel->select(contact);
+        openChat(contact);
     });
-    connect(m_toolRail, &ToolRail::communityClicked, this, [this](const Community &community) {
+    connect(m_homePage, &HomePage::createGroupClicked, this, [this] {
+        statusBar()->showMessage(tr("新建群聊还没做"), 5000);
+    });
+    auto communityNotReady = [this](const Community &community) {
         statusBar()->showMessage(tr("社区「%1」（社区页还没做）").arg(community.name), 5000);
-    });
+    };
+    connect(m_homePage, &HomePage::communityActivated, this, communityNotReady);
+    connect(m_toolRail, &ToolRail::communityClicked, this, communityNotReady);
 
     connect(m_client, &ChatClient::loginSucceeded, this, [this] {
         statusBar()->showMessage(tr("已登录 %1（UID %2）/ 服务器 %3")
@@ -67,6 +82,9 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
     connect(m_client, &ChatClient::loggedOut, this, [this] {
         m_contactPanel->clear();
         m_toolRail->setCommunities({});
+        m_homePage->clear();
+        m_chatPage->clear();
+        m_center->setCurrentWidget(m_homePage);
     });
 
     connect(m_client, &ChatClient::connected, this, [this] { m_contactPanel->setOnline(true); });
@@ -117,6 +135,16 @@ void MainWindow::openSettings() {
     if (dialog.exec() == SettingsDialog::Logout) m_client->logout();
 }
 
+void MainWindow::openChat(const Contact &contact) {
+    m_chatPage->openConversation(contact, m_client->uid());
+    m_center->setCurrentWidget(m_chatPage);
+}
+
+void MainWindow::showHome() {
+    m_contactPanel->clearSelection();
+    m_center->setCurrentWidget(m_homePage);
+}
+
 void MainWindow::requestLists() {
     chat_proto::Envelope contacts;
     contacts.set_type("show_contacts");
@@ -142,6 +170,7 @@ void MainWindow::handleEnvelope(const chat_proto::Envelope &envelope) {
             contacts.append(contact);
         }
         m_contactPanel->setContacts(contacts);
+        m_homePage->setContacts(contacts);
         return;
     }
 
@@ -155,6 +184,28 @@ void MainWindow::handleEnvelope(const chat_proto::Envelope &envelope) {
             communities.append(community);
         }
         m_toolRail->setCommunities(communities);
+        m_homePage->setCommunities(communities);
+        return;
+    }
+
+    // 聊天相关消息路由给 ChatPage
+    if (type == QStringLiteral("history_response") ||
+        type == QStringLiteral("private_chat") ||
+        type == QStringLiteral("Group_Chat") ||
+        type == QStringLiteral("Channel_Chat")) {
+        m_chatPage->handleEnvelope(envelope);
+        return;
+    }
+
+    // system 消息中与聊天有关的部分路由给 ChatPage，其余显示到状态栏
+    if (type == QStringLiteral("system")) {
+        const QString text = QString::fromStdString(envelope.content());
+        if (text.contains(QLatin1String("Message sent.")) ||
+            text.contains(QLatin1String("Failed to load chat history"))) {
+            m_chatPage->handleEnvelope(envelope);
+            return;
+        }
+        statusBar()->showMessage(text, 5000);
         return;
     }
 
