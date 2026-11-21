@@ -8,7 +8,6 @@
 #include "ui/HomePage.h"
 #include "ui/InputDialog.h"
 #include "ui/PendingPage.h"
-#include "ui/SettingsDialog.h"
 #include "ui/SoundPlayer.h"
 
 #include <QHBoxLayout>
@@ -103,6 +102,11 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
         requestLists();
     });
 
+    // 头像换成新的：把本地缓存指向新的 file.id（下好后 avatarChanged 会刷新界面）
+    connect(m_client, &ChatClient::avatarUpdated, this, [this](int fileId) {
+        m_avatars->ensure(m_client->uid(), fileId);
+    });
+
     // 退出登录 / 被顶下线：上一个账号的联系人和社区不能留给下一个账号看到
     connect(m_client, &ChatClient::loggedOut, this, [this] {
         m_contactPanel->clear();
@@ -147,20 +151,6 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
 
     // ChatClient 没消化的业务消息都从这里出来，后面按 type 分给各页面
     connect(m_client, &ChatClient::envelopeReceived, this, &MainWindow::handleEnvelope);
-}
-
-void MainWindow::openSettings() {
-    SettingsDialog dialog(m_client->username(), m_client->uid(), m_client->email(), m_sound, this);
-    // 开着设置时被顶下线：先把设置窗口关掉，再让 main.cpp 那边切回登录窗口
-    connect(m_client, &ChatClient::loggedOut, &dialog, &QDialog::reject);
-    // 改昵称 / 邮箱：设置窗口只发信号，请求由 ChatClient 发，结果再回填给窗口
-    connect(&dialog, &SettingsDialog::nameChangeRequested, m_client, &ChatClient::changeName);
-    connect(&dialog, &SettingsDialog::emailChangeRequested, m_client, &ChatClient::changeEmail);
-    connect(m_client, &ChatClient::profileChanged, &dialog, [this, &dialog] {
-        dialog.setProfile(m_client->username(), m_client->email());
-    });
-    connect(m_client, &ChatClient::profileChangeFailed, &dialog, &SettingsDialog::showProfileError);
-    if (dialog.exec() == SettingsDialog::Logout) m_client->logout();
 }
 
 void MainWindow::openChat(const Contact &contact) {

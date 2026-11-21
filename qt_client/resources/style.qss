@@ -180,6 +180,39 @@ QStatusBar::item {
     border: 1px solid #29292d;
     border-radius: 8px;
 }
+/*裁剪头像窗口的卡片*/
+#cropCard {
+    background: #222225;
+    border: 1px solid #29292d;
+    border-radius: 8px;
+}
+/*裁剪窗口：1:1 预览框（图片自己画上去，这里只给底色）*/
+#cropView {
+    background: #17171a;
+    border: 1px solid #29292d;
+    border-radius: 4px;
+}
+/*裁剪窗口的提示文字*/
+#cropHint {
+    color: #949ba4;
+    font-size: 12px;
+}
+/*裁剪窗口的缩放滑块：和音量滑块同一套外观*/
+#zoomSlider::groove:horizontal {
+    height: 4px;
+    background: #3a3a40;
+    border-radius: 2px;
+}
+#zoomSlider::sub-page:horizontal {
+    background: #5865f2;
+    border-radius: 2px;
+}
+#zoomSlider::handle:horizontal {
+    width: 14px;
+    margin: -5px 0;
+    border-radius: 7px;
+    background: #ffffff;
+}
 /*一行里的次要文字（项目名、说明）*/
 #settingsRowName {
     color: #949ba4;

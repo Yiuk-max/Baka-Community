@@ -142,6 +142,11 @@ void ChatClient::logout() {
     emit loggedOut(false);
 }
 
+void ChatClient::send(const chat_proto::Envelope &envelope, const QByteArray &fileData) {
+    const QByteArray frame = packetcodec::encode(envelope, fileData);
+    QMetaObject::invokeMethod(m_core, "sendFrame", Qt::QueuedConnection, Q_ARG(QByteArray, frame));
+}
+
 void ChatClient::changeName(const QString &name) {
     chat_proto::Envelope envelope;
     envelope.set_type("change_name");
@@ -153,6 +158,17 @@ void ChatClient::changeEmail(const QString &email) {
     chat_proto::Envelope envelope;
     envelope.set_type("set_email");
     envelope.set_email(email.toStdString());
+    send(envelope);
+}
+
+// 头像：把 avatar_id 指向一个已经上传好的文件；回执成功后才改本地缓存
+void ChatClient::setAvatar(int fileId) {
+    if (fileId <= 0) return;
+    m_pendingAvatarId = fileId;
+
+    chat_proto::Envelope envelope;
+    envelope.set_type("set_avatar");
+    envelope.set_file_id(std::to_string(fileId));   // 协议里 file_id 是字符串
     send(envelope);
 }
 
@@ -182,6 +198,23 @@ bool ChatClient::handleProfileReply(const QString &text) {
     if (text.startsWith(QLatin1String("Failed to set email"))) {
         emit profileChangeFailed(tr("邮箱修改失败，该邮箱可能已被其他账号使用"));
         return true;
+    }
+    // 头像：回执原文见后端 src/logic/handlers/auth_handler.cpp 的 set_avatar。
+    // 只在 set_avatar 在途时才拦，否则会把文件下载的 “File not found” 也吞掉。
+    if (m_pendingAvatarId > 0) {
+        if (text.startsWith(QLatin1String("Avatar updated successfully"))) {
+            m_avatarId = m_pendingAvatarId;
+            m_pendingAvatarId = 0;
+            emit avatarUpdated(m_avatarId);
+            return true;
+        }
+        if (text.startsWith(QLatin1String("Failed to update avatar"))
+                || text.startsWith(QLatin1String("Invalid file_id"))
+                || text.startsWith(QLatin1String("File not found"))) {
+            m_pendingAvatarId = 0;
+            emit avatarUpdateFailed(tr("头像更新失败，请重试"));
+            return true;
+        }
     }
     return false;
 }
@@ -369,5 +402,6 @@ void ChatClient::clearSession() {
     m_email.clear();
     m_verifyEmail.clear();
     m_avatarId = 0;
+    m_pendingAvatarId = 0;
     QSettings().remove(QLatin1String(kTokenKey));
 }

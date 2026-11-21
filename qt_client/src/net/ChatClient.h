@@ -21,6 +21,8 @@ public:
 
     void start();                                   // 起网络线程并连接服务器
     void send(const chat_proto::Envelope &envelope);
+    // 发 Envelope + 帧尾原始二进制（file_chunk 上传分片用）
+    void send(const chat_proto::Envelope &envelope, const QByteArray &fileData);
 
     QString serverUrl() const { return m_serverUrl; }
     bool isConnected() const { return m_connected; }
@@ -41,6 +43,8 @@ public slots:
     // 改昵称 / 改邮箱：只发请求，结果由 profileChanged / profileChangeFailed 通知
     void changeName(const QString &name);
     void changeEmail(const QString &email);
+    // 头像：把 avatar_id 指向一个已经上传好的 file.id（文件要先用 AvatarUploader 传）
+    void setAvatar(int fileId);
 
 signals:
     void connected();
@@ -61,6 +65,9 @@ signals:
     void loggedOut(bool kicked);
     void profileChanged();                          // 昵称或邮箱已改成功，username() / email() 是新值
     void profileChangeFailed(const QString &message);
+    // 头像：setAvatar() 请求成功 / 失败（成功后 avatarId() 是新值）
+    void avatarUpdated(int fileId);
+    void avatarUpdateFailed(const QString &message);
 
     void envelopeReceived(const chat_proto::Envelope &envelope);      // 上面没消化的消息
     // 文件下载的两种回复（file_download_ready / file_chunk）；fileData 是分片带的文件数据
@@ -96,4 +103,5 @@ private:
     QString m_email;
     QString m_verifyEmail;                          // 登录被拦住时记下的邮箱（重发验证码要用）
     int m_avatarId = 0;
+    int m_pendingAvatarId = 0;                      // set_avatar 在途时等激活的 file.id
 };

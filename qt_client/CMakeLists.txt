@@ -78,6 +78,8 @@ set(APP_SOURCES
     src/ui/SettingsDialog.cpp
     src/ui/AccountSettingsPage.h
     src/ui/AccountSettingsPage.cpp
+    src/ui/AvatarCropDialog.h
+    src/ui/AvatarCropDialog.cpp
     src/ui/BakaSettingsPage.h
     src/ui/BakaSettingsPage.cpp
     src/model/Contact.h
@@ -112,6 +114,8 @@ set(APP_SOURCES
     src/net/WsCore.cpp
     src/net/ChatClient.h
     src/net/ChatClient.cpp
+    src/net/AvatarUploader.h
+    src/net/AvatarUploader.cpp
     src/net/TlsSetup.h
     src/net/TlsSetup.cpp
     src/net/FileDownloader.h

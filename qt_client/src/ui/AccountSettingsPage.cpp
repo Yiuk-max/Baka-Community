@@ -1,5 +1,9 @@
 #include "AccountSettingsPage.h"
 
+#include "Avatar.h"
+#include "AvatarCropDialog.h"
+
+#include <QFileDialog>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -28,6 +32,9 @@ AccountSettingsPage::AccountSettingsPage(const QString &username, int uid, const
 
     auto *heading = new QLabel(tr("账号信息"));
     heading->setObjectName("settingsHeading");
+    // 头像放在最上面：左边头像，右边“上传新头像”
+    layout->addWidget(makeAvatarRow());
+    layout->addSpacing(8);
     layout->addWidget(heading);
     layout->addSpacing(4);
 
@@ -99,6 +106,80 @@ QWidget *AccountSettingsPage::makeRow(const QString &name, Row &row, bool editab
         setEditing(row, false);
     });
     return widget;
+}
+
+QWidget *AccountSettingsPage::makeAvatarRow() {
+    auto *widget = new QWidget;
+    widget->setObjectName("settingsRow");
+    widget->setAttribute(Qt::WA_StyledBackground);
+    widget->setFixedHeight(88);
+    auto *layout = new QHBoxLayout(widget);
+    layout->setContentsMargins(16, 0, 12, 0);
+    layout->setSpacing(8);
+
+    // 和其他行同一套列宽：“头像”标签占 92，后面才是头像预览
+    auto *nameLabel = new QLabel(tr("头像"));
+    nameLabel->setObjectName("settingsRowName");
+    nameLabel->setFixedWidth(92);
+    layout->addWidget(nameLabel);
+
+    // 圆形头像预览（和通讯录 / 聊天里的头像同一套画法）
+    m_avatar = new QLabel;
+    m_avatar->setFixedSize(56, 56);
+    m_avatar->setPixmap(avatar::user(QString(), 56));
+    layout->addWidget(m_avatar);
+    layout->addStretch();
+
+    // 右边：上传按钮
+    m_avatarButton = makeButton(tr("上传新头像"), "settingsRowButton");
+    m_avatarButton->setFixedSize(96, 32);
+    layout->addWidget(m_avatarButton);
+
+    connect(m_avatarButton, &QPushButton::clicked, this, &AccountSettingsPage::chooseAvatar);
+    return widget;
+}
+
+// 选图 → 裁剪（固定 1:1、可拖动缩放）→ 把裁好的 PNG 交给上层上传
+void AccountSettingsPage::chooseAvatar() {
+    const QString path = QFileDialog::getOpenFileName(
+        this, tr("选择头像"), QString(),
+        tr("图片文件 (*.png *.jpg *.jpeg *.bmp *.webp)"));
+    if (path.isEmpty()) return;
+
+    AvatarCropDialog crop(path, this);
+    if (!crop.isValid()) {
+        showAvatarError(tr("这张图片打不开，请换一张"));
+        return;
+    }
+    if (crop.exec() != QDialog::Accepted) return;
+
+    const QByteArray png = crop.croppedPng();
+    if (png.isEmpty()) {
+        showAvatarError(tr("裁剪失败，请重试"));
+        return;
+    }
+    m_message->clear();
+    setAvatarUploading(true);
+    emit avatarUploadRequested(png);
+}
+
+void AccountSettingsPage::setAvatar(const QString &path) {
+    m_avatar->setPixmap(avatar::user(path, 56));
+}
+
+void AccountSettingsPage::setAvatarUploading(bool busy) {
+    m_avatarButton->setEnabled(!busy);
+    m_avatarButton->setText(busy ? tr("上传中…") : tr("上传新头像"));
+}
+
+void AccountSettingsPage::showAvatarDone() {
+    setAvatarUploading(false);
+    showMessage(tr("头像已更新"), false);
+}
+
+void AccountSettingsPage::showAvatarError(const QString &message) {
+    setAvatarUploading(false);
+    showMessage(message, true);
 }
 
 void AccountSettingsPage::setEditing(Row &row, bool editing) {

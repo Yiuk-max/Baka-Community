@@ -1,13 +1,15 @@
-// MainWindow 的一部分：邀请好友、入群 / 入社区申请的拉取与审批。
+// MainWindow 的一部分：设置窗口、邀请好友、入群 / 入社区申请的拉取与审批。
 // 单独放一个文件是为了不让 MainWindow.cpp 超过 400 行；类还是同一个 MainWindow。
 #include "MainWindow.h"
 
+#include "net/AvatarUploader.h"
 #include "net/ChatClient.h"
 #include "store/AvatarStore.h"
 #include "ui/ContactPanel.h"
 #include "ui/HomePage.h"
 #include "ui/InviteDialog.h"
 #include "ui/PendingPage.h"
+#include "ui/SettingsDialog.h"
 
 #include <QRegularExpression>
 
@@ -130,4 +132,33 @@ void MainWindow::handleJoinDecision(const JoinRequest &request, bool accept) {
     env.set_requester_uid(request.uid);
     env.set_accept(accept);
     m_client->send(env);
+}
+
+void MainWindow::openSettings() {
+    SettingsDialog dialog(m_client->username(), m_client->uid(), m_client->email(), m_sound, this);
+    // 开着设置时被顶下线：先把设置窗口关掉，再让 main.cpp 那边切回登录窗口
+    connect(m_client, &ChatClient::loggedOut, &dialog, &QDialog::reject);
+    // 改昵称 / 邮箱：设置窗口只发信号，请求由 ChatClient 发，结果再回填给窗口
+    connect(&dialog, &SettingsDialog::nameChangeRequested, m_client, &ChatClient::changeName);
+    connect(&dialog, &SettingsDialog::emailChangeRequested, m_client, &ChatClient::changeEmail);
+    connect(m_client, &ChatClient::profileChanged, &dialog, [this, &dialog] {
+        dialog.setProfile(m_client->username(), m_client->email());
+    });
+    connect(m_client, &ChatClient::profileChangeFailed, &dialog, &SettingsDialog::showProfileError);
+
+    // 头像：选图裁剪 → 上传文件 → set_avatar → 本地缓存换成新头像
+    dialog.setAvatar(m_avatars->path(m_client->uid()));
+    auto *uploader = new AvatarUploader(m_client, &dialog);   // 跟着设置窗口一起销毁
+    connect(&dialog, &SettingsDialog::avatarUploadRequested, uploader, &AvatarUploader::upload);
+    connect(uploader, &AvatarUploader::failed, &dialog, &SettingsDialog::showAvatarError);
+    connect(uploader, &AvatarUploader::finished, m_client, &ChatClient::setAvatar);   // 拿到 file.id 再绑定
+    connect(m_client, &ChatClient::avatarUpdated, &dialog, [&dialog](int) {
+        dialog.avatarUploadDone();   // 本地缓存由构造函数里那条连接负责刷新
+    });
+    connect(m_client, &ChatClient::avatarUpdateFailed, &dialog, &SettingsDialog::showAvatarError);
+    connect(m_avatars, &AvatarStore::avatarChanged, &dialog, [this, &dialog](int uid) {
+        if (uid == m_client->uid()) dialog.setAvatar(m_avatars->path(uid));
+    });
+
+    if (dialog.exec() == SettingsDialog::Logout) m_client->logout();
 }
