@@ -46,11 +46,25 @@ int main(int argc, char *argv[]) {
     QObject::connect(&loginDialog, &LoginDialog::loginRequested, &client, &ChatClient::login);
     QObject::connect(&loginDialog, &LoginDialog::registerRequested, &client,
                      &ChatClient::registerAccount);
+    // 邮箱验证码：提交 / 重发
+    QObject::connect(&loginDialog, &LoginDialog::verifyCodeSubmitted, &client,
+                     &ChatClient::verifyEmail);
+    QObject::connect(&loginDialog, &LoginDialog::resendVerifyRequested, &client,
+                     &ChatClient::resendVerifyCode);
     QObject::connect(&client, &ChatClient::authStarted, &loginDialog,
                      [&loginDialog] { loginDialog.setBusy(true); });
     QObject::connect(&client, &ChatClient::authFailed, &loginDialog, &LoginDialog::showError);
     QObject::connect(&client, &ChatClient::registerSucceeded, &loginDialog,
                      &LoginDialog::showRegistered);
+    // 验证码回执：登录被拦住 → 切验证页；验证通过 → 回登录表单；重发成功 / 还在冷却 → 提示
+    QObject::connect(&client, &ChatClient::emailVerificationRequired, &loginDialog,
+                     &LoginDialog::showVerificationRequired);
+    QObject::connect(&client, &ChatClient::verifySucceeded, &loginDialog,
+                     &LoginDialog::showVerified);
+    QObject::connect(&client, &ChatClient::verifyCodeSent, &loginDialog,
+                     &LoginDialog::showVerifyCodeSent);
+    QObject::connect(&client, &ChatClient::verifyCooldown, &loginDialog,
+                     &LoginDialog::showVerifyCooldown);
     // 本地有 token 时会自动登录，成功后同样走这里直接关掉登录窗口
     QObject::connect(&client, &ChatClient::loginSucceeded, &loginDialog, &LoginDialog::accept);
 

@@ -304,6 +304,11 @@ Spinner {
     color: #949ba4;
     font-size: 13px;
 }
+/*邮箱验证页的提示文字*/
+#verifyHint {
+    color: #b5bac1;
+    font-size: 13px;
+}
 /*标签*/
 #fieldLabel {
     color: #b5bac1;

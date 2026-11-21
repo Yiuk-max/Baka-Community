@@ -22,6 +22,11 @@ QString translateAuthError(const QString &text) {
     if (text.contains(QLatin1String("No account is bound"))) return ChatClient::tr("该邮箱没有绑定账号");
     if (text.contains(QLatin1String("already registered"))) return ChatClient::tr("该邮箱已被注册");
     if (text.contains(QLatin1String("Registration failed"))) return ChatClient::tr("注册失败，服务器暂时不可用");
+    if (text.contains(QLatin1String("Invalid or expired verification code"))) return ChatClient::tr("验证码无效或已过期");
+    if (text.contains(QLatin1String("Verification code cannot be empty"))) return ChatClient::tr("请输入验证码");
+    if (text.contains(QLatin1String("Failed to send verification email"))) return ChatClient::tr("验证码邮件发送失败，请稍后重试");
+    if (text.contains(QLatin1String("No email is bound"))) return ChatClient::tr("该账号还没有绑定邮箱");
+    if (text.contains(QLatin1String("provide your email"))) return ChatClient::tr("请填写邮箱后再获取验证码");
     return text;
 }
 
@@ -92,6 +97,8 @@ void ChatClient::login(const QString &identity, const QString &password) {
     } else {
         envelope.set_email(identity.toStdString());
     }
+    // 记下邮箱：登录被“邮箱未验证”拦住时，重发验证码还得用它
+    m_verifyEmail = isUid ? QString() : identity;
     sendAuth(Pending::Login, envelope);
 }
 
@@ -103,6 +110,23 @@ void ChatClient::registerAccount(const QString &nickname, const QString &email,
     envelope.set_email(email.toStdString());
     envelope.set_password(password.toStdString());
     sendAuth(Pending::Register, envelope);
+}
+
+// 提交邮箱验证码；未登录时服务端靠 uid 找账号
+void ChatClient::verifyEmail(const QString &code, const QString &uid) {
+    chat_proto::Envelope envelope;
+    envelope.set_type("verify_email");
+    envelope.set_code(code.toStdString());
+    envelope.set_uid(uid.toInt());
+    sendAuth(Pending::Verify, envelope);
+}
+
+// 重新发送验证码；未登录时服务端靠 email 找账号
+void ChatClient::resendVerifyCode(const QString &email) {
+    chat_proto::Envelope envelope;
+    envelope.set_type("resend_verify");
+    envelope.set_email(email.toStdString());
+    sendAuth(Pending::Resend, envelope);
 }
 
 void ChatClient::logout() {
@@ -258,6 +282,17 @@ void ChatClient::handleAuthReply(const QString &text) {
         emit authFailed(tr("登录已过期，请重新登录"));
         return;
     }
+    if (pending == Pending::Login) {
+        // "Email not verified for UID 000001. Please enter the verification code ..."
+        // 密码已经对了，只是邮箱没验证：让 UI 切到验证码页（不当作登录失败）
+        static const QRegularExpression notVerified(
+            QStringLiteral("Email not verified for UID (\\d+)\\."));
+        const QRegularExpressionMatch match = notVerified.match(text);
+        if (match.hasMatch()) {
+            emit emailVerificationRequired(match.captured(1), m_verifyEmail);
+            return;
+        }
+    }
     if (pending == Pending::Register) {
         // "Registration successful. You can now log in with UID 000001 or a@b.com."
         static const QRegularExpression pattern(//正则表达式用来匹配服务器返回的注册成功消息
@@ -265,6 +300,30 @@ void ChatClient::handleAuthReply(const QString &text) {
         const QRegularExpressionMatch match = pattern.match(text);
         if (match.hasMatch()) {
             emit registerSucceeded(match.captured(1), match.captured(2));
+            return;
+        }
+    }
+    if (pending == Pending::Verify) {
+        if (text.contains(QLatin1String("Email verified successfully"))) {
+            emit verifySucceeded();
+            return;
+        }
+    }
+    if (pending == Pending::Resend) {
+        // "Verification email sent to [a@b.com]."/"Please wait 42 seconds before requesting another code."
+        static const QRegularExpression sent(
+            QStringLiteral("Verification email sent to \\[(.*)\\]\\."));
+        static const QRegularExpression wait(
+            QStringLiteral("Please wait (\\d+) seconds before requesting another code"));
+        const QRegularExpressionMatch sentMatch = sent.match(text);
+        if (sentMatch.hasMatch()) {
+            m_verifyEmail = sentMatch.captured(1);
+            emit verifyCodeSent(60);
+            return;
+        }
+        const QRegularExpressionMatch waitMatch = wait.match(text);
+        if (waitMatch.hasMatch()) {
+            emit verifyCooldown(waitMatch.captured(1).toInt());
             return;
         }
     }
@@ -308,6 +367,7 @@ void ChatClient::clearSession() {
     m_uid = 0;
     m_username.clear();
     m_email.clear();
+    m_verifyEmail.clear();
     m_avatarId = 0;
     QSettings().remove(QLatin1String(kTokenKey));
 }

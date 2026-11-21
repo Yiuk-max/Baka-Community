@@ -34,6 +34,9 @@ public slots:
     // 账号：纯数字按 UID 登录，否则按邮箱登录
     void login(const QString &identity, const QString &password);
     void registerAccount(const QString &nickname, const QString &email, const QString &password);
+    // 邮箱验证码：未登录也能发（服务端按请求里的 UID / 邮箱找账号）
+    void verifyEmail(const QString &code, const QString &uid);
+    void resendVerifyCode(const QString &email);
     void logout();                                  // 退出登录：通知服务端、清本地 token（连接保留）
     // 改昵称 / 改邮箱：只发请求，结果由 profileChanged / profileChangeFailed 通知
     void changeName(const QString &name);
@@ -48,6 +51,11 @@ signals:
     void authStarted();                             // 登录 / 注册 / 自动登录请求已发出
     void loginSucceeded();
     void registerSucceeded(const QString &uid, const QString &email); // 注册不建立登录态，还要再登录
+    // 登录被服务端拦住：密码对但邮箱还没验证，需要先输入验证码
+    void emailVerificationRequired(const QString &uid, const QString &email);
+    void verifySucceeded();                         // 邮箱验证通过（服务端回 Email verified successfully）
+    void verifyCodeSent(int cooldownSeconds);       // 验证码已重新寄出，客户端开始冷却倒计时
+    void verifyCooldown(int seconds);               // 服务端还在冷却，回一个剩余秒数
     void authFailed(const QString &message);
     // 已回到未登录状态。kicked = true 表示是被顶下线（账号在别处登录），否则是自己退出
     void loggedOut(bool kicked);
@@ -59,7 +67,7 @@ signals:
     void fileFrameReceived(const chat_proto::Envelope &envelope, const QByteArray &fileData);
 
 private:
-    enum class Pending { None, Login, Register, Token };
+    enum class Pending { None, Login, Register, Token, Verify, Resend };
 
     void onConnected();
     void onDisconnected(const QString &reason);
@@ -86,5 +94,6 @@ private:
     int m_uid = 0;
     QString m_username;
     QString m_email;
+    QString m_verifyEmail;                          // 登录被拦住时记下的邮箱（重发验证码要用）
     int m_avatarId = 0;
 };

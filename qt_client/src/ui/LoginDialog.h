@@ -17,11 +17,17 @@ public:
     void setBusy(bool busy);
     void showError(const QString &message);
     void showRegistered(const QString &uid, const QString &email);
+    void showVerificationRequired(const QString &uid, const QString &email);
+    void showVerified();
+    void showVerifyCodeSent(int seconds);
+    void showVerifyCooldown(int seconds);
     void resetForm();
 
 signals:
     void loginRequested(const QString &identity, const QString &password);
     void registerRequested(const QString &nickname, const QString &email, const QString &password);
+    void verifyCodeSubmitted(const QString &code, const QString &uid);
+    void resendVerifyRequested(const QString &email);
 
 protected:
     // 无边框窗口得自己处理拖动

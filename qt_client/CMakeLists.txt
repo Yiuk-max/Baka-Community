@@ -59,6 +59,8 @@ set(APP_SOURCES
     src/AppConfig.cpp
     src/ui/LoginPage.h
     src/ui/LoginPage.cpp
+    src/ui/VerifyEmailForm.h
+    src/ui/VerifyEmailForm.cpp
     src/ui/LoginDialog.h
     src/ui/LoginDialog.cpp
     src/ui/AutoLoginDialog.h
