@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <csignal>
+#include <cstdlib>   // std::getenv（监听地址覆盖）
 #include <iostream>
 #include <thread>
 #include <vector>
@@ -105,7 +106,19 @@ int run_websocket_server(unsigned short port) {
         net::io_context ioc{io_threads};   //参数用来提示io_context内部维护的线程池大小，方便asio自动调优，实际线程数由用户创建的线程数决定
         auto pool = std::make_shared<ThreadPool>(cfg.business_threads());
 
-        tcp::endpoint endpoint{tcp::v6(), port};
+        // 监听地址：默认只绑回环。生产链路是 Cloudflare → nginx:443 → 127.0.0.1:8080，
+        // 8080 一旦绑到 0.0.0.0 就等于绕过 nginx/TLS/Cloudflare 直连后端（2026-11-20 外部节点实测可达）。
+        // 需要直连调试时：BAKA_LISTEN_ADDR=0.0.0.0 临时放开。
+        std::string listen_addr = "127.0.0.1";
+        if (const char* env = std::getenv("BAKA_LISTEN_ADDR")) {
+            if (*env) listen_addr = env;
+        }
+        beast::error_code addr_ec;
+        const auto bind_addr = net::ip::make_address(listen_addr, addr_ec);
+        if (addr_ec) {
+            throw std::runtime_error("invalid BAKA_LISTEN_ADDR: " + listen_addr);
+        }
+        tcp::endpoint endpoint{bind_addr, port};
         auto server = std::make_shared<WsServer>(ioc, endpoint, pool,
                                                  cfg.ws_path(),
                                                  cfg.ws_max_message_bytes(),
@@ -114,7 +127,7 @@ int run_websocket_server(unsigned short port) {
                                                  cfg.max_connections());
         server->run();
 
-        std::cout << "[ws] WebSocket server listening on port " << port
+        std::cout << "[ws] WebSocket server listening on " << listen_addr << ":" << port
                   << ", path " << cfg.ws_path()
                   << ", web_root " << cfg.ws_web_root()
                   << ", io_threads " << io_threads << std::endl;
