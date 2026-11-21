@@ -2,6 +2,7 @@
 
 #include "Assets.h"
 #include "Avatar.h"
+#include "PendingPage.h"
 
 #include <QButtonGroup>
 #include <QFrame>
@@ -43,12 +44,12 @@ HomePage::HomePage(QWidget *parent) : QWidget(parent) {
 
     m_pages->addWidget(buildAllPage());
 
-    // “待定”页：好友申请 / 群聊邀请 / 社区申请。协议还没接，先放空状态
-    auto *pending = new QLabel(tr("没有待处理的申请"));
-    pending->setObjectName("homeEmpty");
-    pending->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
-    pending->setContentsMargins(0, 40, 0, 0);
-    m_pages->addWidget(pending);
+    // “待定”页是独立的 PendingPage；有待处理的申请时，标签上带上数量
+    m_pendingPage = new PendingPage(this);
+    m_pages->addWidget(m_pendingPage);
+    connect(m_pendingPage, &PendingPage::countChanged, this, [this](int count) {
+        m_pendingTab->setText(count == 0 ? tr("待定") : tr("待定 · %1").arg(count));
+    });
 }
 
 QWidget *HomePage::buildHeader() {
@@ -83,6 +84,7 @@ QWidget *HomePage::buildHeader() {
         tab->setFocusPolicy(Qt::NoFocus);
         group->addButton(tab, i);
         tabs->addWidget(tab);
+        if (i == 1) m_pendingTab = tab;
     }
     layout->addLayout(tabs);
     layout->addStretch();
@@ -155,6 +157,7 @@ QWidget *HomePage::buildAllPage() {
     return scroll;
 }
 
+
 QVBoxLayout *HomePage::addSection(QVBoxLayout *column, const QString &title, const QString &hint) {
     auto *titleLabel = new QLabel(title);
     titleLabel->setObjectName("homeSubHeading");
@@ -216,6 +219,7 @@ void HomePage::clear() {
     m_search->clear();
     setContacts({});
     setCommunities({});
+    m_pendingPage->clear();
 }
 
 void HomePage::rebuildContacts() {

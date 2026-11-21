@@ -11,6 +11,7 @@
 
 class QLabel;
 class QLineEdit;
+class PendingPage;
 class QPushButton;
 class QStackedWidget;
 class QVBoxLayout;
@@ -22,7 +23,8 @@ public:
 
     void setContacts(const QList<Contact> &contacts);          // 好友 + 群，整份替换
     void setCommunities(const QList<Community> &communities);  // 已加入的社区，整份替换
-    void clear();                                              // 退出登录时清空
+    PendingPage *pendingPage() const { return m_pendingPage; }  // “待定”页，申请数据直接喂给它
+    void clear();                                              // 退出登录时清空（含待定页）
 
 signals:
     void contactActivated(const Contact &contact);        // 点了某个好友 / 群：打开聊天
@@ -46,6 +48,8 @@ private:
     QVBoxLayout *m_friendRows = nullptr;
     QVBoxLayout *m_groupRows = nullptr;
     QVBoxLayout *m_communityRows = nullptr;
+    QPushButton *m_pendingTab = nullptr;          // “待定”标签，有申请时文字里带上数量
+    PendingPage *m_pendingPage = nullptr;
 
     QList<Contact>   m_contacts;
     QList<Community> m_communities;

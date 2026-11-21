@@ -15,4 +15,9 @@ struct Message {
     int     replyToId         = 0;
     QString replyToSenderName;
     QString replyToContent;
+    // 文件消息（isFile 为 true 时正文不显示，显示附件）
+    bool    isFile   = false;
+    int     fileId   = 0;
+    QString fileName;
+    quint64 fileSize = 0;
 };

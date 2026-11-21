@@ -2,6 +2,7 @@
 #include <QWidget>
 
 class QTextEdit;
+class QLabel;
 class QPushButton;
 class QToolButton;
 class EmojiPanel;
@@ -14,9 +15,13 @@ public:
 
     void setPlaceholder(const QString &text);
     void setEnabled(bool enabled);
+    // 输入框上方的“正在回复 @某人”提示条；回复哪条消息由 ChatPage 记
+    void setReplyTarget(const QString &name, const QString &preview);
+    void clearReplyTarget();
 
 signals:
     void messageSent(const QString &text);
+    void replyCancelled();              // 用户点了提示条上的 ×
 
 private:
     void onSendClicked();
@@ -24,6 +29,8 @@ private:
     void toggleEmojiPanel();
 
     QTextEdit   *m_edit       = nullptr;
+    QWidget     *m_replyBar   = nullptr;   // 回复提示条，平时隐藏
+    QLabel      *m_replyText  = nullptr;
     QToolButton *m_attachBtn  = nullptr;   // 左侧“＋”，功能未接
     QPushButton *m_sendBtn    = nullptr;   // 有字才显示
     QToolButton *m_emojiBtn   = nullptr;

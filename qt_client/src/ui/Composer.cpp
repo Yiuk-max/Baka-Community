@@ -5,6 +5,7 @@
 #include <QFontMetrics>
 #include <QHBoxLayout>
 #include <QKeyEvent>
+#include <QLabel>
 #include <QPushButton>
 #include <QTextDocument>
 #include <QTextEdit>
@@ -98,8 +99,45 @@ Composer::Composer(QWidget *parent) : QWidget(parent) {
     innerLayout->addWidget(m_sendBtn, 0, Qt::AlignVCenter);
     innerLayout->addWidget(m_emojiBtn, 0, Qt::AlignVCenter);
 
+    // 回复提示条：右键消息点“回复”后出现在输入框上方
+    m_replyBar = new QWidget(this);
+    m_replyBar->setObjectName("composerReply");
+    auto *replyLayout = new QHBoxLayout(m_replyBar);
+    replyLayout->setContentsMargins(16, 6, 12, 6);
+    replyLayout->setSpacing(8);
+    m_replyText = new QLabel(m_replyBar);
+    m_replyText->setObjectName("composerReplyText");
+    m_replyText->setTextFormat(Qt::PlainText);
+    m_replyText->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);   // 太长就截断，不把窗口撑宽
+    auto *replyCancel = new QToolButton(m_replyBar);
+    replyCancel->setObjectName("composerReplyCancel");
+    replyCancel->setText(QStringLiteral("×"));
+    replyCancel->setFixedSize(18, 18);
+    replyCancel->setCursor(Qt::PointingHandCursor);
+    replyCancel->setFocusPolicy(Qt::NoFocus);
+    replyCancel->setToolTip(tr("取消回复"));
+    replyLayout->addWidget(m_replyText, 1);
+    replyLayout->addWidget(replyCancel);
+    m_replyBar->hide();
+    connect(replyCancel, &QToolButton::clicked, this, [this] {
+        clearReplyTarget();
+        emit replyCancelled();
+    });
+
+    outerLayout->addWidget(m_replyBar);
     outerLayout->addWidget(inner);
     adjustHeight();
+}
+
+void Composer::setReplyTarget(const QString &name, const QString &preview) {
+    m_replyText->setText(tr("正在回复 @%1：%2").arg(name, preview.simplified()));
+    m_replyBar->show();
+    m_edit->setFocus();
+}
+
+void Composer::clearReplyTarget() {
+    m_replyBar->hide();
+    m_replyText->clear();
 }
 
 void Composer::toggleEmojiPanel() {

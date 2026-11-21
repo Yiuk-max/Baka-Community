@@ -4,17 +4,31 @@
 #include "ui/Assets.h"
 #include "ui/Avatar.h"
 #include "ui/Composer.h"
-#include "util/TimeFormat.h"
+#include "ui/MenuStyle.h"
+#include "ui/MessageRow.h"
 #include "message.pb.h"
 
+#include <QClipboard>
 #include <QDateTime>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMenu>
+#include <QPointer>
 #include <QRegularExpression>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QTimer>
 #include <QVBoxLayout>
+
+// 文件消息的几个字段：历史记录（ChatItem）和实时推送（Envelope）里名字一样、位置不同，统一从这里填
+static void fillFile(Message &msg, bool isFile, int fileId, const std::string &name, quint64 size) {
+    if (!isFile) return;
+    msg.isFile   = true;
+    msg.fileId   = fileId;
+    msg.fileName = QString::fromStdString(name);
+    msg.fileSize = size;
+}
 
 ChatPage::ChatPage(ChatClient *client, QWidget *parent)
     : QWidget(parent), m_client(client)
@@ -62,15 +76,25 @@ ChatPage::ChatPage(ChatClient *client, QWidget *parent)
                                .toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"));
         opt.isSelf       = true;
         opt.isOptimistic = true;
-        appendMessages({opt});
-        scrollToBottom();
 
         chat_proto::Envelope env;
         env.set_message(text.toStdString());
         env.set_target_uid(m_conv.uid);
         env.set_type(m_conv.isGroup ? "group_chat" : "private_chat");
+        // 正在回复某条消息：带上它的 id，本地这条也先把引用显示出来
+        if (m_replyTo.messageId > 0) {
+            env.set_reply_to_message_id(m_replyTo.messageId);
+            opt.replyToId         = m_replyTo.messageId;
+            opt.replyToSenderName = m_replyTo.senderName;
+            opt.replyToContent    = m_replyTo.content;
+            m_replyTo = {};
+            m_composer->clearReplyTarget();
+        }
+        appendMessages({opt});
+        scrollToBottom();
         m_client->send(env);
     });
+    connect(m_composer, &Composer::replyCancelled, this, [this] { m_replyTo = {}; });
 
     // 滚动到顶部时加载更早的历史
     connect(m_scroll->verticalScrollBar(), &QScrollBar::valueChanged, this, [this](int value) {
@@ -88,7 +112,10 @@ void ChatPage::openConversation(const Contact &contact, int selfUid) {
     m_hasMore   = true;
     m_oldestId  = 0;
     m_messageIds.clear();
-    m_optimisticLabels.clear();
+    m_rows.clear();
+    m_pendingIds.clear();
+    m_replyTo = {};
+    m_composer->clearReplyTarget();
 
     // 清空旧消息（保留末尾的 stretch）
     while (m_msgLayout->count() > 1) {
@@ -110,7 +137,10 @@ void ChatPage::clear() {
     m_hasMore   = true;
     m_oldestId  = 0;
     m_messageIds.clear();
-    m_optimisticLabels.clear();
+    m_rows.clear();
+    m_pendingIds.clear();
+    m_replyTo = {};
+    m_composer->clearReplyTarget();
     while (m_msgLayout->count() > 1) {
         QLayoutItem *item = m_msgLayout->takeAt(0);
         if (item->widget()) item->widget()->deleteLater();
@@ -149,6 +179,7 @@ void ChatPage::handleEnvelope(const chat_proto::Envelope &envelope) {
             msg.senderName = QString::fromStdString(item.sender_name());
             msg.content    = QString::fromStdString(item.content());
             msg.timestamp  = QString::fromStdString(item.timestamp());
+            fillFile(msg, item.is_file(), item.file_id(), item.file_name(), item.file_size());
             msg.isSelf     = (item.sender_uid() == m_selfUid);
             if (item.reply_to().message_id() > 0) {
                 msg.replyToId         = item.reply_to().message_id();
@@ -179,6 +210,8 @@ void ChatPage::handleEnvelope(const chat_proto::Envelope &envelope) {
         msg.senderName = QString::fromStdString(envelope.sender_name());
         msg.content    = QString::fromStdString(envelope.content());
         msg.timestamp  = QString::fromStdString(envelope.timestamp());
+        fillFile(msg, envelope.is_file(), QString::fromStdString(envelope.file_id()).toInt(),
+                 envelope.file_name(), envelope.file_size());
         msg.isSelf     = false;
         const bool follow = isAtBottom();   // 用户在往上翻旧消息时不打断他
         appendMessages({msg});
@@ -198,12 +231,12 @@ void ChatPage::handleEnvelope(const chat_proto::Envelope &envelope) {
         msg.senderName = QString::fromStdString(envelope.sender_name());
         msg.content    = QString::fromStdString(envelope.content());
         msg.timestamp  = QString::fromStdString(envelope.timestamp());
+        fillFile(msg, envelope.is_file(), QString::fromStdString(envelope.file_id()).toInt(),
+                 envelope.file_name(), envelope.file_size());
         msg.isSelf     = (envelope.sender_uid() == m_selfUid);
         // 群聊推送是确认：把对应乐观消息升级为已发送
-        if (msg.isSelf && !m_optimisticLabels.isEmpty()) {
-            const int tempId = m_optimisticLabels.firstKey();
-            QLabel *lbl = m_optimisticLabels.take(tempId);
-            if (lbl) lbl->setObjectName("msgText");
+        if (msg.isSelf && !m_pendingIds.isEmpty()) {
+            confirmPending(mid);
             return;  // 已有乐观占位，不重复添加
         }
         const bool follow = isAtBottom();
@@ -212,28 +245,94 @@ void ChatPage::handleEnvelope(const chat_proto::Envelope &envelope) {
         return;
     }
 
-    // "Message sent. Message ID: N" 私聊确认
-    if (type == QStringLiteral("system")) {
-        static const QRegularExpression sentRe(
-            QStringLiteral("Message sent\\. Message ID: (\\d+)"));
-        static const QRegularExpression failRe(
-            QStringLiteral("Failed to load chat history"));
-        const QString text = QString::fromStdString(envelope.content());
-        QRegularExpressionMatch m = sentRe.match(text);
-        if (m.hasMatch()) {
-            const int realId = m.captured(1).toInt();
-            m_messageIds.insert(realId);
-            if (!m_optimisticLabels.isEmpty()) {
-                const int tempId = m_optimisticLabels.firstKey();
-                QLabel *lbl = m_optimisticLabels.take(tempId);
-                if (lbl) lbl->setObjectName("msgText");
-            }
-            return;
-        }
-        if (failRe.match(text).hasMatch()) {
-            m_loading = false;  // 解除卡死，允许用户再次触发加载
-            return;
-        }
+    // 对方（或群里别人）撤回了一条消息
+    if (type == QStringLiteral("delete_message")) {
+        removeMessage(envelope.message_id());
+        return;
+    }
+}
+
+bool ChatPage::handleSystemText(const QString &text) {
+    // "Message sent. Message ID: N"：私聊发送确认
+    static const QRegularExpression sentRe(QStringLiteral("Message sent\\. Message ID: (\\d+)"));
+    // "Message [N] deleted"：自己撤回成功
+    static const QRegularExpression deletedRe(QStringLiteral("Message \\[(\\d+)\\] deleted"));
+    // 发送失败（和 web 端 backendClient.js 用的是同一组关键字）
+    static const QRegularExpression sendFailRe(QStringLiteral(
+        "Message cannot be empty|(?:UID|Group|Channel) \\[\\d+\\] does not exist|not your friend"
+        "|Failed to store message|must be logged in to send|not a member of this community"),
+        QRegularExpression::CaseInsensitiveOption);
+
+    QRegularExpressionMatch m = sentRe.match(text);
+    if (m.hasMatch()) {
+        confirmPending(m.captured(1).toInt());
+        return true;
+    }
+    m = deletedRe.match(text);
+    if (m.hasMatch()) {
+        removeMessage(m.captured(1).toInt());
+        return true;
+    }
+    if (text.contains(QLatin1String("Failed to load chat history"))) {
+        m_loading = false;  // 解除卡死，允许用户再次触发加载
+        return true;
+    }
+    // 发送失败：把那条灰色的乐观消息拿掉；返回 false，让主窗口把原因显示出来
+    if (sendFailRe.match(text).hasMatch() && !m_pendingIds.isEmpty())
+        removeMessage(m_pendingIds.takeFirst());
+    return false;
+}
+
+void ChatPage::confirmPending(int realId) {
+    m_messageIds.insert(realId);
+    if (m_pendingIds.isEmpty()) return;
+    MessageRow *row = m_rows.take(m_pendingIds.takeFirst());
+    if (!row) return;
+    row->confirm(realId);
+    m_rows.insert(realId, row);
+}
+
+void ChatPage::removeMessage(int id) {
+    MessageRow *row = m_rows.take(id);
+    if (!row) return;
+    if (m_replyTo.messageId == id) {   // 正要回复的那条被撤回了
+        m_replyTo = {};
+        m_composer->clearReplyTarget();
+    }
+    m_msgLayout->removeWidget(row);
+    row->hide();
+    row->deleteLater();
+}
+
+// 消息右键菜单：只放 web 端真正实现了的功能（回复 / 复制文字 / 撤回自己的消息）
+void ChatPage::showMessageMenu(MessageRow *row, const QPoint &globalPos) {
+    const Message msg = row->message();   // 先拷一份：菜单开着的时候这一行可能被撤回删掉
+    const bool sent = msg.messageId > 0;  // 还没确认的乐观消息没有真实 id，不能回复 / 撤回
+
+    QMenu menu(this);
+    menus::prepare(&menu);
+    QAction *replyAction = menu.addAction(tr("回复"));
+    replyAction->setEnabled(sent);
+    QAction *copyAction = menu.addAction(tr("复制文字"));
+    QAction *recallAction = nullptr;
+    if (msg.isSelf) {
+        menu.addSeparator();
+        recallAction = menu.addAction(tr("撤回"));
+        recallAction->setEnabled(sent);
+    }
+
+    QAction *chosen = menu.exec(globalPos);
+    if (!chosen) return;
+    if (chosen == copyAction) {
+        QGuiApplication::clipboard()->setText(msg.isFile ? msg.fileName : msg.content);
+    } else if (chosen == replyAction) {
+        m_replyTo = msg;
+        m_composer->setReplyTarget(msg.senderName, msg.content);
+    } else if (chosen == recallAction) {
+        chat_proto::Envelope env;
+        env.set_type("delete_message");
+        env.set_message_id(msg.messageId);
+        m_client->send(env);
     }
 }
 
@@ -256,62 +355,16 @@ void ChatPage::appendMessages(const QList<Message> &msgs, bool prepend) {
     }
 }
 
-QWidget *ChatPage::buildMessageWidget(const Message &msg) {
-    auto *row = new QWidget(m_msgContainer);
-    row->setObjectName("messageRow");
-    auto *layout = new QHBoxLayout(row);
-    layout->setContentsMargins(16, 3, 16, 3);
-    layout->setSpacing(12);
-
-    // 头像（好友用圆形，暂无真实头像，统一用默认图）
-    auto *avatarLabel = new QLabel(row);
-    avatarLabel->setFixedSize(36, 36);
-    avatarLabel->setPixmap(avatar::rounded(assets::defaultAvatar(), 36, 18));
-    layout->addWidget(avatarLabel, 0, Qt::AlignTop);
-
-    // 右侧内容区
-    auto *content  = new QWidget(row);
-    auto *cLayout  = new QVBoxLayout(content);
-    cLayout->setContentsMargins(0, 0, 0, 0);
-    cLayout->setSpacing(2);
-
-    // 发送者名 + 时间戳
-    auto *hRow    = new QWidget(content);
-    auto *hLayout = new QHBoxLayout(hRow);
-    hLayout->setContentsMargins(0, 0, 0, 0);
-    hLayout->setSpacing(8);
-    auto *nameLabel = new QLabel(msg.senderName, hRow);
-    nameLabel->setObjectName(msg.isSelf ? "msgSelfName" : "msgName");
-    auto *timeLabel = new QLabel(timeformat::toLocal(msg.timestamp), hRow);
-    timeLabel->setObjectName("msgTime");
-    hLayout->addWidget(nameLabel);
-    hLayout->addWidget(timeLabel);
-    hLayout->addStretch();
-    cLayout->addWidget(hRow);
-
-    // 回复引用（如有）
-    if (msg.replyToId > 0 && !msg.replyToContent.isEmpty()) {
-        auto *quote = new QLabel(
-            QStringLiteral("↩ ") + msg.replyToSenderName + QStringLiteral(": ") + msg.replyToContent,
-            content);
-        quote->setObjectName("msgQuote");
-        quote->setWordWrap(true);
-        cLayout->addWidget(quote);
-    }
-
-    // 消息正文
-    auto *textLabel = new QLabel(msg.content, content);
-    textLabel->setObjectName(msg.isOptimistic ? "msgTextPending" : "msgText");
-    textLabel->setWordWrap(true);
-    textLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    cLayout->addWidget(textLabel);
-
-    content->setLayout(cLayout);
-    layout->addWidget(content, 1);
-
-    if (msg.isOptimistic)
-        m_optimisticLabels[msg.messageId] = textLabel;
-
+// 一条消息一个 MessageRow（长什么样在 MessageRow.cpp）；这里只登记它并接上右键菜单
+MessageRow *ChatPage::buildMessageWidget(const Message &msg) {
+    auto *row = new MessageRow(msg, m_msgContainer);
+    m_rows.insert(msg.messageId, row);
+    if (msg.isOptimistic) m_pendingIds.append(msg.messageId);
+    // 排队连接 + QPointer：菜单开着的时候这一行可能被撤回删掉，不能在它自己的事件处理里弹菜单
+    const QPointer<MessageRow> guard(row);
+    connect(row, &MessageRow::menuRequested, this, [this, guard](const QPoint &globalPos) {
+        if (guard) showMessageMenu(guard, globalPos);
+    }, Qt::QueuedConnection);
     return row;
 }
 

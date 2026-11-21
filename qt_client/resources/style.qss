@@ -640,3 +640,112 @@ Spinner {
     background: transparent;
     height: 0;
 }
+
+/* ---- 弹出菜单（消息右键 / 社区右键 / 工具栏“＋”，web 端 .community-context-menu） ---- */
+QMenu#appMenu {
+    background: #1b1c20;
+    border: 1px solid #2c2c31;
+    border-radius: 10px;
+    padding: 8px;
+}
+QMenu#appMenu::item {
+    background: transparent;
+    border-radius: 5px;
+    padding: 8px 28px 8px 10px;
+    color: #b5bac1;
+    font-size: 13.5px;
+}
+QMenu#appMenu::item:selected {
+    background: #5a65ea;
+    color: #ffffff;
+}
+QMenu#appMenu::item:disabled {
+    background: transparent;
+    color: #4f545c;
+}
+QMenu#appMenu::separator {
+    height: 1px;
+    margin: 6px 4px;
+    background: #2c2c31;
+}
+/*工具栏：社区图标下面的“＋”按钮（圆形）*/
+#railAddButton {
+    background: #222225;
+    border: 0;
+    border-radius: 24px;
+    color: #b5bac1;
+    font-size: 22px;
+}
+#railAddButton:hover {
+    background: #5865f2;
+    color: #ffffff;
+}
+/*输入框上方的“正在回复 @某人”提示条*/
+#composerReply {
+    background: #292a30;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+}
+#composerReplyText {
+    background: transparent;
+    color: #b5bac1;
+    font-size: 13px;
+}
+#composerReplyCancel {
+    background: #4e5058;
+    border: 0;
+    border-radius: 9px;
+    padding: 0;
+    color: #e6e7ea;
+    font-size: 13px;
+}
+#composerReplyCancel:hover {
+    background: #5c5e66;
+}
+/*聊天里的文件卡片（web 端 .message-file）*/
+#messageFile {
+    background: #202126;
+    border: 1px solid #2b2b2f;
+    border-radius: 8px;
+}
+#messageFileName {
+    background: transparent;
+    color: #00a8fc;
+    font-size: 16px;
+}
+/*文件大小、图片 / 视频下面的说明*/
+#messageFileSize {
+    background: transparent;
+    color: #949ba4;
+    font-size: 12px;
+}
+/*文件卡片右边的下载按钮（web 端 .message-file-download）*/
+#messageFileDownload {
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    padding: 0;
+    color: #b5bac1;
+    font-size: 18px;
+}
+#messageFileDownload:hover {
+    background: #2b2b2f;
+    color: #f2f3f5;
+}
+/*图片 / 视频右下角的下载按钮：叠在图上，所以带半透明深色底*/
+#messageMediaDownload {
+    background: rgba(0, 0, 0, 0.6);
+    border: 0;
+    border-radius: 4px;
+    padding: 0;
+    color: #f2f3f5;
+    font-size: 18px;
+}
+#messageMediaDownload:hover {
+    background: rgba(0, 0, 0, 0.85);
+}
+/*邀请好友弹窗里的列表：透明，透出卡片底色*/
+#inviteScroll, #inviteList {
+    background: transparent;
+    border: 0;
+}

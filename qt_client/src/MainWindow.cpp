@@ -4,15 +4,18 @@
 #include "ui/ChatPage.h"
 #include "ui/ContactPanel.h"
 #include "ui/HomePage.h"
+#include "ui/InputDialog.h"
+#include "ui/PendingPage.h"
 #include "ui/SettingsDialog.h"
 #include "ui/SoundPlayer.h"
-#include "ui/ToolRail.h"
 
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QRegularExpression>
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QTime>
+#include <QTimer>
 #include <QWidget>
 
 MainWindow::MainWindow(ChatClient *client, QWidget *parent)
@@ -59,9 +62,23 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
         m_contactPanel->select(contact);
         openChat(contact);
     });
-    connect(m_homePage, &HomePage::createGroupClicked, this, [this] {
-        statusBar()->showMessage(tr("新建群聊还没做"), 5000);
+    connect(m_homePage, &HomePage::createGroupClicked, this, &MainWindow::createGroup);
+    // “待定”页处理好友申请：发 accept_friend / reject_friend，稍后重新拉申请列表和通讯录
+    connect(m_homePage->pendingPage(), &PendingPage::friendRequestHandled, this, [this](int uid, bool accept) {
+        chat_proto::Envelope env;
+        env.set_type(accept ? "accept_friend" : "reject_friend");
+        env.set_sender_uid(uid);
+        m_client->send(env);
+        refreshAfter(QStringLiteral("Failed to handle friend request"));   // 借用同一条刷新路径
     });
+    // “待定”页审批入群 / 入社区申请
+    connect(m_homePage->pendingPage(), &PendingPage::joinRequestHandled, this, &MainWindow::handleJoinDecision);
+    // 通讯录右键群聊 → 邀请好友：弹好友列表
+    connect(m_contactPanel, &ContactPanel::inviteRequested, this, [this](const Contact &group) {
+        inviteFriends(tr("邀请好友加入「%1」").arg(group.name), false, group.uid);
+    });
+    connect(m_toolRail, &ToolRail::addActionTriggered, this, &MainWindow::handleAddAction);
+    connect(m_toolRail, &ToolRail::communityActionTriggered, this, &MainWindow::handleCommunityAction);
     auto communityNotReady = [this](const Community &community) {
         statusBar()->showMessage(tr("社区「%1」（社区页还没做）").arg(community.name), 5000);
     };
@@ -83,6 +100,8 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
         m_contactPanel->clear();
         m_toolRail->setCommunities({});
         m_homePage->clear();
+        m_contacts.clear();
+        m_communities.clear();
         m_chatPage->clear();
         m_center->setCurrentWidget(m_homePage);
     });
@@ -145,14 +164,149 @@ void MainWindow::showHome() {
     m_center->setCurrentWidget(m_homePage);
 }
 
-void MainWindow::requestLists() {
-    chat_proto::Envelope contacts;
-    contacts.set_type("show_contacts");
-    m_client->send(contacts);
+void MainWindow::request(const char *type) {
+    chat_proto::Envelope env;
+    env.set_type(type);
+    m_client->send(env);
+}
 
-    chat_proto::Envelope communities;
-    communities.set_type("show_communities");
-    m_client->send(communities);
+void MainWindow::requestLists() {
+    request("show_contacts");
+    request("show_communities");
+    request("show_friend_requests");
+}
+
+bool MainWindow::ask(const QString &title, const QStringList &labels, QStringList *values) {
+    InputDialog dialog(title, labels, this);
+    connect(m_client, &ChatClient::loggedOut, &dialog, &QDialog::reject);   // 被顶下线时把弹窗关掉
+    if (dialog.exec() != QDialog::Accepted) return false;
+    if (values) {
+        values->clear();
+        for (int i = 0; i < labels.size(); ++i) values->append(dialog.value(i));
+    }
+    return true;
+}
+
+void MainWindow::createGroup() {
+    QStringList v;
+    if (!ask(tr("创建群聊"), {tr("群聊名称")}, &v)) return;
+    chat_proto::Envelope env;
+    env.set_type("create_group");
+    env.set_group_name(v[0].toStdString());
+    m_client->send(env);
+}
+
+// 工具栏“＋”菜单。请求发出去之后，成功 / 失败都由服务端的 system 文本告知（显示在状态栏）
+void MainWindow::handleAddAction(ToolRail::AddAction action) {
+    chat_proto::Envelope env;
+    QStringList v;
+    switch (action) {
+    case ToolRail::AddAction::CreateGroup:
+        createGroup();
+        return;
+    case ToolRail::AddAction::CreateCommunity:
+        if (!ask(tr("创建社区"), {tr("社区名称"), tr("社区简介（可不填）")}, &v)) return;
+        env.set_type("create_community");
+        env.set_group_name(v[0].toStdString());
+        env.set_description(v[1].toStdString());
+        break;
+    case ToolRail::AddAction::JoinCommunity:
+        if (!ask(tr("申请加入社区"), {tr("社区 ID"), tr("申请留言（可不填）")}, &v)) return;
+        env.set_type("join_community");
+        env.set_community_id(v[0].toInt());
+        env.set_apply_message(v[1].toStdString());
+        break;
+    case ToolRail::AddAction::JoinGroup:
+        if (!ask(tr("申请加入群聊"), {tr("群聊 UID")}, &v)) return;
+        env.set_type("send_join_group");
+        env.set_group_uid(v[0].toInt());
+        break;
+    case ToolRail::AddAction::AddFriend:
+        if (!ask(tr("添加好友"), {tr("对方邮箱"), tr("验证消息（可不填）")}, &v)) return;
+        env.set_type("add_friend");
+        env.set_email(v[0].toStdString());
+        env.set_apply_message(v[1].toStdString());
+        break;
+    }
+    // 社区 ID / 群 UID 必须是正整数
+    if ((action == ToolRail::AddAction::JoinCommunity || action == ToolRail::AddAction::JoinGroup)
+            && v[0].toInt() <= 0) {
+        statusBar()->showMessage(tr("ID 必须是数字"), 5000);
+        return;
+    }
+    m_client->send(env);
+}
+
+void MainWindow::handleCommunityAction(const Community &community, ToolRail::CommunityAction action) {
+    chat_proto::Envelope env;
+    env.set_community_id(community.id);
+    QStringList v;
+    switch (action) {
+    case ToolRail::CommunityAction::Invite:
+        inviteFriends(tr("邀请好友加入「%1」").arg(community.name), true, community.id);
+        return;
+    case ToolRail::CommunityAction::CreateChannel:
+        if (!ask(tr("在「%1」创建频道").arg(community.name),
+                 {tr("频道名称"), tr("频道分区（可不填）")}, &v)) return;
+        env.set_type("create_channel");
+        env.set_group_name(v[0].toStdString());
+        env.set_category((v[1].isEmpty() ? tr("一般") : v[1]).toStdString());
+        break;
+    case ToolRail::CommunityAction::Leave:
+        if (!ask(tr("确定离开「%1」？").arg(community.name), {})) return;
+        env.set_type("leave_community");
+        break;
+    }
+    m_client->send(env);
+}
+
+// show_friend_requests 的回复是一段文本，每行 "[昵称] (UID): 留言"
+bool MainWindow::handleFriendRequestList(const QString &text) {
+    static const QRegularExpression headRe(QStringLiteral(
+        "^\\[.*?\\] \\(\\d+\\):|No pending friend requests|Failed to load friend requests"));
+    static const QRegularExpression lineRe(QStringLiteral("^\\[(.*?)\\] \\((\\d+)\\)(?::\\s*(.*))?$"));
+    if (!headRe.match(text).hasMatch()) return false;
+
+    QList<FriendRequest> requests;
+    for (const QString &line : text.split(QLatin1Char('\n'))) {
+        const QRegularExpressionMatch m = lineRe.match(line.trimmed());
+        if (m.hasMatch()) requests.append({m.captured(2).toInt(), m.captured(1), m.captured(3)});
+    }
+    m_homePage->pendingPage()->setFriendRequests(requests);
+    return true;
+}
+
+// 服务端没有“列表变了”的专门推送，只能看 system 文本里的关键字（和 web 端 backendClient.js 同一组）
+void MainWindow::refreshAfter(const QString &text) {
+    static const QRegularExpression friendsRe(QStringLiteral(
+        "wants to be friend with you|You are now friends with|rejected your friend request"
+        "|removed from .*friend list|Failed to handle friend request"),
+        QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression groupsRe(QStringLiteral(
+        "Group created|Group deleted|Group name updated|added to group|removed from group"));
+    static const QRegularExpression communitiesRe(QStringLiteral(
+        "Community created|Community deleted|Community updated|added to community|left community"));
+
+    const bool friends = friendsRe.match(text).hasMatch();
+    const bool contacts = friends || groupsRe.match(text).hasMatch();
+    const bool communities = communitiesRe.match(text).hasMatch();
+    // 审批完一条申请：重新拉一遍申请列表
+    if (text.contains(QLatin1String("Join request accepted"))
+            || text.contains(QLatin1String("Join request rejected"))) {
+        QTimer::singleShot(150, this, [this] {
+            if (m_client->uid() == 0) return;
+            requestGroupRequests();
+            requestCommunityRequests();
+        });
+    }
+    if (!contacts && !communities) return;
+    // 稍等一下再拉，让服务端先把这次改动落库
+    QTimer::singleShot(200, this, [this, friends, contacts, communities] {
+        if (m_client->uid() == 0) return;   // 这期间已经退出登录
+        if (friends) request("show_friend_requests");
+        if (contacts) request("show_contacts");
+        if (communities) request("show_communities");
+    });
 }
 
 void MainWindow::handleEnvelope(const chat_proto::Envelope &envelope) {
@@ -171,6 +325,8 @@ void MainWindow::handleEnvelope(const chat_proto::Envelope &envelope) {
         }
         m_contactPanel->setContacts(contacts);
         m_homePage->setContacts(contacts);
+        m_contacts = contacts;
+        requestGroupRequests();
         return;
     }
 
@@ -181,10 +337,13 @@ void MainWindow::handleEnvelope(const chat_proto::Envelope &envelope) {
             community.id = info.community_id();
             community.name = QString::fromStdString(info.name());
             community.avatarId = info.avatar_id();
+            community.role = QString::fromStdString(info.my_role());
             communities.append(community);
         }
         m_toolRail->setCommunities(communities);
         m_homePage->setCommunities(communities);
+        m_communities = communities;
+        requestCommunityRequests();
         return;
     }
 
@@ -192,19 +351,19 @@ void MainWindow::handleEnvelope(const chat_proto::Envelope &envelope) {
     if (type == QStringLiteral("history_response") ||
         type == QStringLiteral("private_chat") ||
         type == QStringLiteral("Group_Chat") ||
-        type == QStringLiteral("Channel_Chat")) {
+        type == QStringLiteral("Channel_Chat") ||
+        type == QStringLiteral("delete_message")) {
         m_chatPage->handleEnvelope(envelope);
         return;
     }
 
-    // system 消息中与聊天有关的部分路由给 ChatPage，其余显示到状态栏
+    // system 文本：先给聊天页（发送确认 / 撤回），再看是不是好友申请列表，其余显示到状态栏
     if (type == QStringLiteral("system")) {
-        const QString text = QString::fromStdString(envelope.content());
-        if (text.contains(QLatin1String("Message sent.")) ||
-            text.contains(QLatin1String("Failed to load chat history"))) {
-            m_chatPage->handleEnvelope(envelope);
-            return;
-        }
+        const QString text = QString::fromStdString(envelope.content()).trimmed();
+        if (m_chatPage->handleSystemText(text)) return;
+        if (handleFriendRequestList(text)) return;
+        if (handleJoinRequestList(text)) return;
+        refreshAfter(text);
         statusBar()->showMessage(text, 5000);
         return;
     }

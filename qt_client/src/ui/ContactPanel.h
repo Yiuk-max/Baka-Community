@@ -28,8 +28,10 @@ public:
 signals:
     void contactSelected(const Contact &contact);       // 用户点了某个好友 / 群
     void settingsClicked();                             // 点了账号栏右侧的设置按钮
+    void inviteRequested(const Contact &group);         // 右键某个群 → 邀请好友
 
 private:
+    void showContextMenu(const QPoint &pos);            // 列表右键菜单（目前只有群有）
     void rebuildList();                                 // 按 m_contacts + 搜索关键字重建列表
     void onCurrentRowChanged(int row);
 

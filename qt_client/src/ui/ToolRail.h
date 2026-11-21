@@ -13,12 +13,19 @@ class QVBoxLayout;
 class ToolRail : public QWidget {
     Q_OBJECT
 public:
+    // “＋”按钮菜单里的五项（和 web 端 .community-menu 一致）
+    enum class AddAction { CreateCommunity, CreateGroup, JoinCommunity, JoinGroup, AddFriend };
+    // 社区图标右键菜单里的项
+    enum class CommunityAction { Invite, CreateChannel, Leave };
+
     explicit ToolRail(QWidget *parent = nullptr);
 
     void setCommunities(const QList<Community> &communities);   // 整份替换社区图标；传空列表即清空
 
 signals:
     void communityClicked(const Community &community);          // 点了某个社区图标
+    void addActionTriggered(ToolRail::AddAction action);        // 在“＋”菜单里选了一项
+    void communityActionTriggered(const Community &community, ToolRail::CommunityAction action);
     void homeClicked();          // 单击 logo：回到私聊 / 群聊页
     void logoDoubleClicked();    // 双击 logo：播放 Baka 音效
 
@@ -27,8 +34,12 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
+    void showAddMenu();
+    void showCommunityMenu(const Community &community, const QPoint &globalPos);
+
     QVBoxLayout *m_layout = nullptr;
     QPushButton *m_logoButton = nullptr;
+    QPushButton *m_addButton = nullptr;           // 社区图标下面的“＋”
     QVBoxLayout *m_communityLayout = nullptr;     // 滚动区里放社区图标的布局
     QList<QPushButton *> m_communityButtons;
 };

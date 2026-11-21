@@ -54,6 +54,7 @@ set(APP_SOURCES
     src/main.cpp
     src/MainWindow.h
     src/MainWindow.cpp
+    src/MainWindowRequests.cpp
     src/AppConfig.h
     src/AppConfig.cpp
     src/ui/LoginPage.h
@@ -92,6 +93,17 @@ set(APP_SOURCES
     src/ui/EmojiPanel.cpp
     src/ui/HomePage.h
     src/ui/HomePage.cpp
+    src/ui/MessageRow.h
+    src/ui/MessageRow.cpp
+    src/ui/InputDialog.h
+    src/ui/InputDialog.cpp
+    src/ui/MenuStyle.h
+    src/ui/FileCover.h
+    src/ui/FileCover.cpp
+    src/ui/PendingPage.h
+    src/ui/PendingPage.cpp
+    src/ui/InviteDialog.h
+    src/ui/InviteDialog.cpp
     src/net/PacketCodec.h
     src/net/PacketCodec.cpp
     src/net/WsCore.h
@@ -128,6 +140,7 @@ qt_add_resources(baka_client "appImages"
     BASE resources
     FILES resources/icons/badge-256.png
           resources/icons/settings.png
+          resources/icons/download.png
           resources/icons/toggle_off.png
           resources/icons/toggle_on.png
           resources/images/logo.png

@@ -2,6 +2,7 @@
 
 #include "Assets.h"
 #include "Avatar.h"
+#include "MenuStyle.h"
 
 #include <QHBoxLayout>
 #include <QLabel>
@@ -94,6 +95,21 @@ ContactPanel::ContactPanel(QWidget *parent) : QWidget(parent) {
     connect(settingsButton, &QPushButton::clicked, this, &ContactPanel::settingsClicked);
     connect(m_search, &QLineEdit::textChanged, this, &ContactPanel::rebuildList);
     connect(m_list, &QListWidget::currentRowChanged, this, &ContactPanel::onCurrentRowChanged);
+    m_list->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_list, &QListWidget::customContextMenuRequested, this, &ContactPanel::showContextMenu);
+}
+
+void ContactPanel::showContextMenu(const QPoint &pos) {
+    const QListWidgetItem *item = m_list->itemAt(pos);
+    if (!item) return;
+    // 先把联系人拷出来：菜单开着的时候列表可能刷新，item 会失效
+    const Contact contact = m_contacts.at(item->data(Qt::UserRole).toInt());
+    if (!contact.isGroup) return;
+
+    QMenu menu(this);
+    menus::prepare(&menu);
+    QAction *invite = menu.addAction(tr("邀请好友"));
+    if (menu.exec(m_list->viewport()->mapToGlobal(pos)) == invite) emit inviteRequested(contact);
 }
 
 void ContactPanel::setContacts(const QList<Contact> &contacts) {

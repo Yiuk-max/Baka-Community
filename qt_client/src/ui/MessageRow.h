@@ -1,0 +1,33 @@
+#pragma once
+
+// 聊天页里的一条消息：头像 + 名字 / 时间 + 可选的回复引用 + 正文。
+// 自己不弹菜单，右键时只发信号，菜单由 ChatPage 决定放什么。
+#include "model/Message.h"
+
+#include <QWidget>
+
+class QLabel;
+class QToolButton;
+
+class MessageRow : public QWidget {
+    Q_OBJECT
+public:
+    explicit MessageRow(const Message &msg, QWidget *parent = nullptr);
+
+    const Message &message() const { return m_msg; }
+    // 乐观消息得到服务端确认：换成真实 id，正文从灰色变成正常颜色
+    void confirm(int realId);
+
+signals:
+    void menuRequested(const QPoint &globalPos);
+
+protected:
+    void contextMenuEvent(QContextMenuEvent *event) override;
+
+private:
+    QWidget *buildAttachment();     // 文件消息：图片占位 / 视频封面 / 文件卡片
+    QToolButton *makeDownloadButton(QWidget *parent, const char *objectName);   // 下载按钮（目前占位）
+
+    Message m_msg;
+    QLabel *m_text = nullptr;       // 文件消息没有正文，这时是 nullptr
+};
