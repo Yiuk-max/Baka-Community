@@ -356,6 +356,13 @@ void FileService::download_init(int uid, const chat_proto::Envelope& msg, const 
         return;
     }
 
+    // 归属校验：调用者必须是文件上传者，或文件曾在其参与的私聊/群聊/频道中被发送过。
+    // 无权限统一回 "File not found"，避免文件存在性泄露。
+    if (!repo_->files()->can_access_file(uid, file_id)) {
+        send_system("File not found.\n", send);
+        return;
+    }
+
     const uint32_t cs = chunk_size_;
     const uint32_t chunk_count = static_cast<uint32_t>((f.size + cs - 1) / cs);
 
@@ -388,7 +395,7 @@ void FileService::download_init(int uid, const chat_proto::Envelope& msg, const 
 }
 
 // 拉取单个分片：服务端只读这一块并回 file_chunk，内存/发送队列都有界（背压）。
-void FileService::download_chunk(int /*uid*/, const chat_proto::Envelope& msg, const SendFn& send) {
+void FileService::download_chunk(int uid, const chat_proto::Envelope& msg, const SendFn& send) {
     const int transfer_id = msg.transfer_id();
     const int chunk_index = msg.chunk_index();
 
@@ -397,8 +404,10 @@ void FileService::download_chunk(int /*uid*/, const chat_proto::Envelope& msg, c
         send_system("Transfer not found.\n", send);
         return;
     }
-    if (t.direction != "download") {
-        send_system("Not a download transfer.\n", send);
+    // transfer 归属校验：下载会话的 receiver_uid 必须是当前请求者本人，
+    // 防止任意已登录用户凭已知 transfer_id 直接取块。
+    if (t.direction != "download" || t.receiver_uid != uid) {
+        send_system("Transfer not found.\n", send);
         return;
     }
     if (t.status == "completed" || t.status == "cancelled" || t.status == "failed") {
