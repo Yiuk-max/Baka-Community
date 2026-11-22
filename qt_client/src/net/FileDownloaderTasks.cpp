@@ -125,7 +125,7 @@ bool FileDownloader::pause(const QString &taskId) {
 bool FileDownloader::resume(const QString &taskId) {
     for (int i = 0; i < m_held.size(); ++i) {
         if (m_held.at(i).taskId != taskId) continue;
-        if (m_held.at(i).ownerUid != m_client->uid() || !m_client->isConnected()) return false;
+        if (m_held.at(i).ownerUid != m_client->uid() || !m_client->isAuthenticated()) return false;
         DownloadTask task = m_held.takeAt(i);
         if (hasSameFile(task)) { holdTask(task); return false; }
         task.state = DownloadTask::State::Queued;
@@ -141,7 +141,7 @@ bool FileDownloader::resume(const QString &taskId) {
 void FileDownloader::reset() {
     m_timeout->stop();
 
-    // 正在下的：磁盘任务留临时文件 + 断点，内存任务直接丢
+    // 正在下的：磁盘任务留临时文件 + 断点，内存任务直接丢并通知等待方重新请求
     if (m_hasActive) {
         DownloadTask task = m_active.task;
         const bool memory = m_active.memory;
@@ -154,13 +154,18 @@ void FileDownloader::reset() {
             downloadjournal::save(task);
             holdTask(task);
             emitState(task, task.error);
+        } else {
+            emit failed(task.fileId);   // 头像 / 社区图片的等待项要清掉，登录后重新拉
         }
     }
 
     const QList<DownloadTask> queued = m_queue;
     m_queue.clear();
     for (const DownloadTask &item : queued) {
-        if (item.targetPath.isEmpty()) continue;
+        if (item.targetPath.isEmpty()) {
+            emit failed(item.fileId);   // 静默内存任务（头像等）丢掉后通知等待方
+            continue;
+        }
         DownloadTask task = item;
         task.state = DownloadTask::State::Interrupted;
         task.error = tr("连接已断开");
@@ -242,5 +247,17 @@ int FileDownloader::restorePending(int uid) {
         ++count;
     }
     return count;
+}
+
+// 断线重连后：本次会话里被网络中断的磁盘任务自动续传；用户暂停 / 取消 / 失败的不动
+void FileDownloader::resumeNetworkInterrupted() {
+    if (!m_client->isAuthenticated() || m_client->uid() <= 0) return;
+    QList<DownloadTask> targets;
+    for (const DownloadTask &task : m_held) {
+        if (task.ownerUid == m_client->uid() && task.state == DownloadTask::State::Interrupted
+                && !task.targetPath.isEmpty())
+            targets.append(task);
+    }
+    for (const DownloadTask &task : targets) resume(task.taskId);
 }
 

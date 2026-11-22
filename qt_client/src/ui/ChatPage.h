@@ -55,6 +55,8 @@ private:
     void removeMessage(int id);         // 撤回 / 被对方撤回：把这一行拿掉
     void scrollToBottom();
     bool isAtBottom() const;
+    void onConnectionLost();      // 断线：复位历史 loading、作废未确认回执队列
+    void onSessionRestored();     // 重连认证后：重新拉当前会话最新一页
 
     ChatClient  *m_client       = nullptr;
     AvatarStore *m_avatars      = nullptr;

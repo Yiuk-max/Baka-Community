@@ -41,6 +41,7 @@ public:
     // 登录后调用：把上次没下完的附件任务读回来（状态“已中断”，不自动联网）
     int restorePending(int uid);
     void reset();                            // 断线 / 退出登录：保留临时文件，内存任务丢弃
+    void resumeNetworkInterrupted();         // 同账号重连认证成功后：自动续传本次断网中断的磁盘任务
 
 signals:
     void finished(int fileId, const QByteArray &data);   // 静默小文件下好了（头像 / 社区图片）

@@ -34,3 +34,14 @@ void ChatPage::resizeEvent(QResizeEvent *event) {
     QWidget::resizeEvent(event);
     scheduleMedia();
 }
+
+void ChatPage::onConnectionLost() {
+    m_loading = false;          // 历史请求在途时断线，解除 loading，恢复后可以重拉
+    m_pendingIds.clear();       // 旧连接的“发送成功”回执不能再确认上一批乐观消息
+}
+
+void ChatPage::onSessionRestored() {
+    if (m_conv.uid == 0) return;
+    // 重新校准当前会话的最新一页；输入框草稿保留，未确认的乐观消息在重拉后由服务端数据覆盖
+    openConversation(m_conv, m_selfUid);
+}

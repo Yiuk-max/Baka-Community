@@ -139,6 +139,8 @@ set(APP_SOURCES
     src/net/WsCore.cpp
     src/net/ChatClient.h
     src/net/ChatClient.cpp
+    src/net/ChatClientAuth.cpp
+    src/net/ChatClientReconnect.cpp
     src/net/AvatarUploader.h
     src/net/AvatarUploader.cpp
     src/net/TlsSetup.h
@@ -237,4 +239,19 @@ if(BUILD_ATTACHMENT_TESTS)
         resources/images/default_comm_avatar.png resources/images/default_background.png
         resources/images/logo.png resources/icons/download.png resources/icons/settings.png)
     add_test(NAME attachment_behavior COMMAND attachment_behavior_tests -platform offscreen)
+
+    # 断线重连离线测试：只用 ChatClient + 本地假服务，不涉及界面
+    qt_add_executable(reconnect_behavior_tests tests/reconnect_behavior.cpp
+        src/net/ChatClient.cpp src/net/ChatClientAuth.cpp src/net/ChatClientReconnect.cpp
+        src/net/WsCore.cpp src/net/PacketCodec.cpp src/net/TlsSetup.cpp
+        src/util/DownloadPaths.cpp src/util/DownloadPaths.h
+        ${PROTO_SRCS})
+    set_target_properties(reconnect_behavior_tests PROPERTIES WIN32_EXECUTABLE OFF)
+    target_include_directories(reconnect_behavior_tests PRIVATE
+        "${CMAKE_CURRENT_BINARY_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/src" ${Protobuf_INCLUDE_DIR})
+    target_link_libraries(reconnect_behavior_tests PRIVATE
+        Qt6::Core Qt6::Network Qt6::WebSockets ${Protobuf_LIBRARIES})
+    qt_add_resources(reconnect_behavior_tests "reconnectTestAssets" PREFIX "/" BASE resources FILES
+        resources/images/default_avatar.png)
+    add_test(NAME reconnect_behavior COMMAND reconnect_behavior_tests)
 endif()

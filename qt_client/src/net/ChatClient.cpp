@@ -30,23 +30,70 @@ QString translateAuthError(const QString &text) {
     return text;
 }
 
+int heartbeatIntervalMs() {
+    bool ok = false;
+    const int value = qEnvironmentVariableIntValue("BAKA_HEARTBEAT_INTERVAL_MS", &ok);
+    return ok && value > 0 ? value : 30000;
+}
+int heartbeatWatchdogMs() {
+    bool ok = false;
+    const int value = qEnvironmentVariableIntValue("BAKA_HEARTBEAT_TIMEOUT_MS", &ok);
+    return ok && value > 0 ? value : 15000;
+}
+
 } // namespace
 
 ChatClient::ChatClient(const QString &serverUrl, QObject *parent)
     : QObject(parent), m_serverUrl(serverUrl) {
-    // 业务层心跳定时器（30s，与服务端 heartbeat_interval 默认值一致）
+    // 业务层心跳定时器（服务端 heartbeat_interval 默认 60s，客户端按 30s 发）
     m_heartbeatTimer = new QTimer(this);
-    m_heartbeatTimer->setInterval(30000);
+    m_heartbeatTimer->setInterval(heartbeatIntervalMs());
     connect(m_heartbeatTimer, &QTimer::timeout, this, &ChatClient::sendHeartbeat);
+
+    // 心跳没有应答 = 连接可能已经“半死”（Wi-Fi 断开、对端静默），主动判定失联
+    m_heartbeatWatchdog = new QTimer(this);
+    m_heartbeatWatchdog->setSingleShot(true);
+    m_heartbeatWatchdog->setInterval(heartbeatWatchdogMs());
+    connect(m_heartbeatWatchdog, &QTimer::timeout, this, [this] {
+        // 半死连接：先作废网络层旧 socket，再走统一失联处理
+        QMetaObject::invokeMethod(m_core, "abort", Qt::QueuedConnection);
+        handleTransportLost(tr("心跳超时"));
+    });
 
     m_authTimer = new QTimer(this);
     m_authTimer->setSingleShot(true);
     m_authTimer->setInterval(10000);
-    connect(m_authTimer, &QTimer::timeout, this,
-            [this] { failAuth(tr("服务器响应超时，请重试")); });
+    connect(m_authTimer, &QTimer::timeout, this, [this] {
+        // 自动 token 认证超时只是本次没成功，退避重试；用户主动登录超时则回给界面
+        if (m_pending == Pending::Token) {
+            m_pending = Pending::None;
+            emit statusMessage(tr("自动登录超时"));
+            scheduleReconnect();
+            return;
+        }
+        failAuth(tr("服务器响应超时，请重试"));
+    });
+
+    m_reconnectTimer = new QTimer(this);
+    m_reconnectTimer->setSingleShot(true);
+    connect(m_reconnectTimer, &QTimer::timeout, this, &ChatClient::requestConnect);
+
+    // 认证稳定 30s 后把退避计数清零；刚连上就断不能把重试间隔打回 1s
+    m_stableTimer = new QTimer(this);
+    m_stableTimer->setSingleShot(true);
+    m_stableTimer->setInterval(30000);
+    connect(m_stableTimer, &QTimer::timeout, this, [this] { m_reconnectAttempts = 0; });
 }
 
 ChatClient::~ChatClient() {
+    m_stopping = true;
+    m_autoRecover = false;
+    m_reconnectTimer->stop();
+    m_stableTimer->stop();
+    m_heartbeatTimer->stop();
+    m_heartbeatWatchdog->stop();
+    m_authTimer->stop();
+
     // 先让工作线程里的 socket 收尾，再退出事件循环
     if (m_netThread && m_netThread->isRunning()) {
         QMetaObject::invokeMethod(m_core, "stop", Qt::BlockingQueuedConnection);
@@ -57,6 +104,7 @@ ChatClient::~ChatClient() {
 
 void ChatClient::start() {
     if (m_netThread) return;
+    m_tokenAutoLogin = hasSavedToken();
 
     m_netThread = new QThread(this);
     m_core = new WsCore(QUrl(m_serverUrl));
@@ -69,20 +117,46 @@ void ChatClient::start() {
     connect(m_core, &WsCore::logMessage, this, &ChatClient::statusMessage);
     connect(m_core, &WsCore::connected, this, &ChatClient::onConnected);
     connect(m_core, &WsCore::disconnected, this, &ChatClient::onDisconnected);
+    connect(m_core, &WsCore::sendResult, this, &ChatClient::onSendResult);
     // 收到的字节流统一在这里解 protobuf，再按 type 分发
     connect(m_core, &WsCore::frameReceived, this, &ChatClient::handleFrame);
 
     m_netThread->start();
 }
 
-void ChatClient::send(const chat_proto::Envelope &envelope) {
-    const QByteArray frame = packetcodec::encode(envelope);
+bool ChatClient::send(const chat_proto::Envelope &envelope) {
+    return send(envelope, QByteArray());
+}
+
+bool ChatClient::send(const chat_proto::Envelope &envelope, const QByteArray &fileData) {
+    const QString type = QString::fromStdString(envelope.type());
+    const bool internal = type == QLatin1String("heartbeat") || type == QLatin1String("logout");
+    // 业务消息必须已认证且传输在；认证消息走 sendAuth / rawSend，不经过这里
+    if (!internal && !m_authenticated) return false;
+    if (!m_transportConnected || m_transportGeneration <= 0) return false;
+
+    const QByteArray frame = packetcodec::encode(envelope, fileData);
     // 跨线程：投递到网络线程执行，QByteArray 是已注册的元类型
-    QMetaObject::invokeMethod(m_core, "sendFrame", Qt::QueuedConnection, Q_ARG(QByteArray, frame));
+    QMetaObject::invokeMethod(m_core, "sendFrame", Qt::QueuedConnection,
+                              Q_ARG(int, m_transportGeneration), Q_ARG(QByteArray, frame));
+    return true;
+}
+
+// 只发字节，不做业务认证检查（login / register / verify_token / heartbeat 等认证前消息用）
+bool ChatClient::rawSend(const chat_proto::Envelope &envelope) {
+    if (!m_transportConnected || m_transportGeneration <= 0) return false;
+    const QByteArray frame = packetcodec::encode(envelope);
+    QMetaObject::invokeMethod(m_core, "sendFrame", Qt::QueuedConnection,
+                              Q_ARG(int, m_transportGeneration), Q_ARG(QByteArray, frame));
+    return true;
 }
 
 bool ChatClient::hasSavedToken() const {
-    return !QSettings().value(QLatin1String(kTokenKey)).toString().isEmpty();
+    return !savedToken().isEmpty();
+}
+
+QString ChatClient::savedToken() const {
+    return QSettings().value(QLatin1String(kTokenKey)).toString();
 }
 
 void ChatClient::login(const QString &identity, const QString &password) {
@@ -132,19 +206,27 @@ void ChatClient::resendVerifyCode(const QString &email) {
 void ChatClient::logout() {
     if (m_uid == 0) return;
 
+    // 退出登录后不再自动重连 / 自动登录
+    m_autoRecover = false;
+    m_tokenAutoLogin = false;
+    m_reconnectTimer->stop();
+
     // 服务端只是把这条连接变回未登录，连接本身保留，所以回到登录页可以直接再登录
-    if (m_connected) {
+    if (m_transportConnected) {
         chat_proto::Envelope envelope;
         envelope.set_type("logout");
-        send(envelope);
+        rawSend(envelope);
     }
     clearSession();
     emit loggedOut(false);
 }
 
-void ChatClient::send(const chat_proto::Envelope &envelope, const QByteArray &fileData) {
-    const QByteArray frame = packetcodec::encode(envelope, fileData);
-    QMetaObject::invokeMethod(m_core, "sendFrame", Qt::QueuedConnection, Q_ARG(QByteArray, frame));
+void ChatClient::cancelAutomaticLogin() {
+    m_tokenAutoLogin = false;
+    if (m_pending == Pending::Token) {
+        m_authTimer->stop();
+        m_pending = Pending::None;
+    }
 }
 
 void ChatClient::changeName(const QString &name) {
@@ -173,136 +255,6 @@ void ChatClient::setAvatar(int fileId) {
 }
 
 // 回执原文见后端 src/logic/handlers/auth_handler.cpp 的 change_my_name / set_email
-bool ChatClient::handleProfileReply(const QString &text) {
-    static const QRegularExpression renamed(
-        QStringLiteral("^Name updated successfully\\. Your new name is \\[(.*)\\]\\.$"));
-    static const QRegularExpression emailUpdated(
-        QStringLiteral("^Email updated successfully\\. Your email is \\[(.*)\\]\\.$"));
-
-    QRegularExpressionMatch match = renamed.match(text);
-    if (match.hasMatch()) {
-        m_username = match.captured(1);
-        emit profileChanged();
-        return true;
-    }
-    match = emailUpdated.match(text);
-    if (match.hasMatch()) {
-        m_email = match.captured(1);
-        emit profileChanged();
-        return true;
-    }
-    if (text.startsWith(QLatin1String("Failed to update name"))) {
-        emit profileChangeFailed(tr("昵称修改失败，服务器暂时不可用"));
-        return true;
-    }
-    if (text.startsWith(QLatin1String("Failed to set email"))) {
-        emit profileChangeFailed(tr("邮箱修改失败，该邮箱可能已被其他账号使用"));
-        return true;
-    }
-    // 头像：回执原文见后端 src/logic/handlers/auth_handler.cpp 的 set_avatar。
-    // 只在 set_avatar 在途时才拦，否则会把文件下载的 “File not found” 也吞掉。
-    if (m_pendingAvatarId > 0) {
-        if (text.startsWith(QLatin1String("Avatar updated successfully"))) {
-            m_avatarId = m_pendingAvatarId;
-            m_pendingAvatarId = 0;
-            emit avatarUpdated(m_avatarId);
-            return true;
-        }
-        if (text.startsWith(QLatin1String("Failed to update avatar"))
-                || text.startsWith(QLatin1String("Invalid file_id"))
-                || text.startsWith(QLatin1String("File not found"))) {
-            m_pendingAvatarId = 0;
-            emit avatarUpdateFailed(tr("头像更新失败，请重试"));
-            return true;
-        }
-    }
-    return false;
-}
-
-void ChatClient::onConnected() {
-    m_connected = true;
-    // 连上就先发一次心跳，之后交给定时器
-    sendHeartbeat();
-    m_heartbeatTimer->start();
-    emit connected();
-
-    // 有认证请求在等这次连接（断线后点了登录 / 注册）：现在补发
-    if (m_hasQueuedAuth) {
-        m_hasQueuedAuth = false;
-        send(m_queuedAuth);
-        return;
-    }
-
-    // 本地存着 token 就自动登录（7 天滑动过期，失效时服务端回 system 文本）
-    const QString token = QSettings().value(QLatin1String(kTokenKey)).toString();
-    if (m_uid == 0 && !token.isEmpty()) {
-        chat_proto::Envelope envelope;
-        envelope.set_type("verify_token");
-        envelope.set_token(token.toStdString());
-        sendAuth(Pending::Token, envelope);
-    }
-}
-
-void ChatClient::onDisconnected(const QString &reason) {
-    m_connected = false;
-    m_heartbeatTimer->stop();
-    if (m_pending != Pending::None) failAuth(tr("连接已断开：%1").arg(reason));
-    emit disconnected(reason);
-}
-
-void ChatClient::handleFrame(const QByteArray &payload) {
-    chat_proto::Envelope envelope;
-    QByteArray fileData;
-    if (!packetcodec::decode(payload, envelope, &fileData)) {
-        emit statusMessage(tr("收到无法解析的帧（%1 字节）").arg(payload.size()));
-        return;
-    }
-
-    const QString type = QString::fromStdString(envelope.type());
-    if (type == QStringLiteral("file_download_ready") || type == QStringLiteral("file_chunk")) {
-        emit fileFrameReceived(envelope, fileData);
-        return;
-    }
-    if (type == QStringLiteral("heartbeat_ack")) {
-        const qint64 elapsed = QDateTime::currentMSecsSinceEpoch() - m_heartbeatSentAtMs;
-        emit heartbeatAcked(QString::fromStdString(envelope.content()), elapsed);
-        return;
-    }
-    if (type == QStringLiteral("login_success")) {
-        handleLoginSuccess(envelope);
-        return;
-    }
-    if (type == QStringLiteral("system")) {
-        const QString text = QString::fromStdString(envelope.content()).trimmed();
-        // 被顶下线：账号在别处登录，服务端发完这条就会关掉本连接
-        if (m_uid != 0 && text.contains(QLatin1String("you have been kicked offline"))) {
-            clearSession();
-            emit loggedOut(true);
-            return;
-        }
-        // 自己退出登录的回执，状态在 logout() 里已经处理完了
-        if (text.contains(QLatin1String("Logout successful"))) return;
-        // 未登录时服务端不会主动推送，所以认证在途期间收到的 system 就是这次请求的结果
-        if (m_pending != Pending::None) {
-            handleAuthReply(text);
-            return;
-        }
-        if (handleProfileReply(text)) return;
-    }
-
-    emit envelopeReceived(envelope);
-}
-
-void ChatClient::handleLoginSuccess(const chat_proto::Envelope &envelope) {
-    m_authTimer->stop();
-    m_pending = Pending::None;
-    m_uid = envelope.user().id();
-    m_username = QString::fromStdString(envelope.user().username());
-    m_email = QString::fromStdString(envelope.email());
-    m_avatarId = envelope.avatar_id();
-    QSettings().setValue(QLatin1String(kTokenKey), QString::fromStdString(envelope.token()));
-    emit loginSucceeded();
-}
 
 void ChatClient::handleAuthReply(const QString &text) {
     const Pending pending = m_pending;
@@ -310,9 +262,22 @@ void ChatClient::handleAuthReply(const QString &text) {
     m_pending = Pending::None;
 
     if (pending == Pending::Token) {
-        // token 失效：清掉本地 token，回到手动登录
-        QSettings().remove(QLatin1String(kTokenKey));
-        emit authFailed(tr("登录已过期，请重新登录"));
+        if (tokenInvalidText(text)) {
+            const bool reconnected = (m_uid > 0);
+            m_tokenAutoLogin = false;
+            m_reconnectTimer->stop();
+            clearSession();
+            if (reconnected) {
+                m_autoRecover = false;
+                emit loggedOut(false);   // 复用“回到登录页”的现有流程
+            } else {
+                emit authFailed(tr("登录已过期，请重新登录"));
+            }
+            return;
+        }
+        // 不是明确的失效：保留 token，退避后重试（可能是服务端瞬时异常）
+        emit statusMessage(tr("自动登录失败：%1").arg(text));
+        scheduleReconnect();
         return;
     }
     if (pending == Pending::Login) {
@@ -364,11 +329,23 @@ void ChatClient::handleAuthReply(const QString &text) {
 }
 
 void ChatClient::sendHeartbeat() {
+    if (!m_authenticated || !m_transportConnected) return;
     chat_proto::Envelope envelope;
     envelope.set_type("heartbeat");
 
     m_heartbeatSentAtMs = QDateTime::currentMSecsSinceEpoch();
-    send(envelope);
+    m_heartbeatWatchdog->start();
+    rawSend(envelope);
+}
+
+void ChatClient::beginHeartbeat() {
+    m_heartbeatTimer->start();
+    sendHeartbeat();
+}
+
+void ChatClient::stopHeartbeat() {
+    m_heartbeatTimer->stop();
+    m_heartbeatWatchdog->stop();
 }
 
 void ChatClient::sendAuth(Pending pending, const chat_proto::Envelope &envelope) {
@@ -378,15 +355,14 @@ void ChatClient::sendAuth(Pending pending, const chat_proto::Envelope &envelope)
     m_authTimer->start();
     emit authStarted();
 
-    if (m_connected) {
-        send(envelope);
+    if (m_transportConnected) {
+        rawSend(envelope);
         return;
     }
-    // 没连上（被顶下线后服务端关了连接 / 启动时没连上）：先存着，连上后在 onConnected 里补发。
-    // 连不上的话 onDisconnected 会报错，一直没动静则由 m_authTimer 超时兜底
+    // 没连上：先存着，连上后在 onConnected 里补发。连不上由退避重连兜底
     m_queuedAuth = envelope;
     m_hasQueuedAuth = true;
-    QMetaObject::invokeMethod(m_core, "reconnect", Qt::QueuedConnection);
+    requestConnect();
 }
 
 void ChatClient::failAuth(const QString &message) {
@@ -403,5 +379,8 @@ void ChatClient::clearSession() {
     m_verifyEmail.clear();
     m_avatarId = 0;
     m_pendingAvatarId = 0;
+    m_authenticated = false;
+    m_hasQueuedAuth = false;
     QSettings().remove(QLatin1String(kTokenKey));
+    emit readyChanged(false);
 }

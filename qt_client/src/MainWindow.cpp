@@ -125,7 +125,22 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
         showHome();
     });
 
-    connect(m_client, &ChatClient::connected, this, [this] { m_contactPanel->setOnline(true); });
+    // 在线状态只在“传输 + 认证”都就绪时点亮；断线/认证中不误导
+    connect(m_client, &ChatClient::readyChanged, this, [this](bool ready) {
+        m_contactPanel->setOnline(ready);
+        if (!ready) m_heartbeatLabel->setText(tr("心跳：未连接"));
+    });
+    // 断线重连成功后：重新拉列表，聊天页 / 社区页会各自刷新当前会话
+    connect(m_client, &ChatClient::sessionRestored, this, [this] {
+        statusBar()->showMessage(tr("连接已恢复"), 3000);
+        requestLists();
+    });
+    connect(m_client, &ChatClient::reconnecting, this,
+            [this](bool active, int attempt, int delaySeconds) {
+        m_heartbeatLabel->setText(active
+            ? tr("重连中（第 %1 次，%2 秒后）").arg(attempt).arg(delaySeconds)
+            : tr("正在连接…"));
+    });
 
     // 在设置里改了昵称：左下角账号栏跟着变
     connect(m_client, &ChatClient::profileChanged, this, [this] {
@@ -143,7 +158,7 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
     });
 
     connect(m_client, &ChatClient::disconnected, this, [this](const QString &reason) {
-        m_heartbeatLabel->setText(tr("心跳：断开（%1）").arg(reason));
+        m_heartbeatLabel->setText(tr("已断开：%1").arg(reason));
         m_contactPanel->setOnline(false);
     });
 

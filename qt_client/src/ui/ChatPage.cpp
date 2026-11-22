@@ -74,6 +74,7 @@ ChatPage::ChatPage(ChatClient *client, AvatarStore *avatars, MediaStore *media, 
 
     connect(m_composer, &Composer::messageSent, this, [this](const QString &text) {
         if (m_conv.uid == 0) return;
+        if (!m_client->isAuthenticated() || !m_client->isConnected()) return;   // 断线不发
         // 乐观消息：立刻显示，收到 "Message sent. Message ID: N" 后确认
         Message opt;
         opt.messageId    = m_nextTempId--;
@@ -117,6 +118,10 @@ ChatPage::ChatPage(ChatClient *client, AvatarStore *avatars, MediaStore *media, 
         if (value < 60 && m_hasMore && !m_loading && m_loaded)
             requestHistory(m_oldestId);
     });
+
+    // 断线 / 重连认证：不在断线期间反复拉历史，恢复后重新校准当前会话
+    connect(m_client, &ChatClient::disconnected, this, &ChatPage::onConnectionLost);
+    connect(m_client, &ChatClient::sessionRestored, this, &ChatPage::onSessionRestored);
 }
 
 void ChatPage::openConversation(const Contact &contact, int selfUid) {

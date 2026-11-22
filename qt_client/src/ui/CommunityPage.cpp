@@ -84,6 +84,19 @@ CommunityPage::CommunityPage(ChatClient *client, AvatarStore *avatars, MediaStor
             &CommunityPage::memberRoleChangeRequested);
     connect(m_membersPanel, &CommunityMembersPanel::removeRequested, this,
             &CommunityPage::removeMemberRequested);
+
+    // 断线：旧连接在途的频道/成员请求作废；重连认证后重新拉
+    connect(m_client, &ChatClient::disconnected, this, [this] {
+        m_pendingChannels.clear();
+        m_pendingMembers.clear();
+    });
+    connect(m_client, &ChatClient::sessionRestored, this, [this] {
+        if (m_community.id <= 0) return;
+        m_pendingChannels.clear();
+        m_pendingMembers.clear();
+        requestChannels();
+        requestMembers();
+    });
 }
 
 QWidget *CommunityPage::buildSidebar() {

@@ -55,7 +55,8 @@ FileDownloader::FileDownloader(ChatClient *client, QObject *parent)
     connect(m_client, &ChatClient::envelopeReceived, this, &FileDownloader::handleEnvelope);
     connect(m_client, &ChatClient::disconnected, this, &FileDownloader::reset);
     connect(m_client, &ChatClient::loggedOut, this, &FileDownloader::reset);
-    // 断线期间入队的任务：等 ChatClient 自己连回来再继续，这里不主动重连
+    // 重新认证成功后：恢复本次断网中断的磁盘任务，再继续排队（这里不主动重连）
+    connect(m_client, &ChatClient::sessionRestored, this, &FileDownloader::resumeNetworkInterrupted);
     connect(m_client, &ChatClient::loginSucceeded, this, [this] { startNext(); });
 }
 
@@ -71,7 +72,9 @@ void FileDownloader::download(int fileId) {
 }
 
 void FileDownloader::startNext() {
-    if (m_hasActive || m_queue.isEmpty() || !m_client->isConnected() || m_client->uid() <= 0) return;
+    // 传输在 + 已认证 + 是当前账号，才能动下载
+    if (m_hasActive || m_queue.isEmpty() || !m_client->isConnected()
+            || !m_client->isAuthenticated() || m_client->uid() <= 0) return;
     while (!m_queue.isEmpty() && m_queue.first().ownerUid != m_client->uid())
         holdTask(m_queue.takeFirst());
     if (m_queue.isEmpty()) return;

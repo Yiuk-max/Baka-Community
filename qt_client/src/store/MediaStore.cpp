@@ -106,8 +106,8 @@ void MediaStore::ensure(const Message &message, bool manual) {
     const bool isVideo = video(message.fileName);
     if (!manual && !isImage && !(isVideo && message.fileSize > 0
                                 && message.fileSize <= quint64(m_smallVideoLimit))) return;
-    if (!m_client->isConnected() || m_client->uid() != m_uid) {
-        if (manual) emit errorOccurred(tr("连接已断开，请重新登录后重试"));
+    if (!m_client->isAuthenticated() || m_client->uid() != m_uid) {
+        if (manual) emit errorOccurred(tr("连接已断开，请稍后重试"));
         return;
     }
     for (const auto &task : m_downloader->tasks()) {

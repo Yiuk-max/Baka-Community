@@ -78,7 +78,9 @@ int main(int argc, char *argv[]) {
                          &AutoLoginDialog::fallbackToLogin);
         // 根本没连上服务器时不会有 authFailed，要单独处理
         QObject::connect(&client, &ChatClient::disconnected, &autoLogin,
-                         [&loginDialog, &autoLogin](const QString &reason) {
+                         [&loginDialog, &autoLogin, &client](const QString &reason) {
+            // 退回手动登录：停掉后台 token 自动登录，避免它抢走用户正在输入的登录表单
+            client.cancelAutomaticLogin();
             loginDialog.showError(QObject::tr("无法连接服务器：%1").arg(reason));
             autoLogin.fallbackToLogin();
         });
