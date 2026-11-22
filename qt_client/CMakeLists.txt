@@ -55,6 +55,8 @@ set(APP_SOURCES
     src/MainWindow.h
     src/MainWindow.cpp
     src/MainWindowRequests.cpp
+    src/MainWindowCommunitySettings.cpp
+    src/MainWindowCommunityAssets.cpp
     src/AppConfig.h
     src/AppConfig.cpp
     src/ui/LoginPage.h
@@ -91,6 +93,22 @@ set(APP_SOURCES
     src/ui/SoundPlayer.cpp
     src/ui/ChatPage.h
     src/ui/ChatPage.cpp
+    src/ui/CommunityPage.h
+    src/ui/CommunityPage.cpp
+    src/ui/CommunityPageReplies.cpp
+    src/ui/CommunitySettingsDialog.h
+    src/ui/CommunitySettingsDialog.cpp
+    src/ui/CommunityOverviewPage.h
+    src/ui/CommunityOverviewPage.cpp
+    src/ui/CommunityOverviewAssets.cpp
+    src/ui/CommunityChannelsPage.h
+    src/ui/CommunityChannelsPage.cpp
+    src/ui/CommunityGuidePage.h
+    src/ui/CommunityGuidePage.cpp
+    src/ui/CommunityChannelList.h
+    src/ui/CommunityChannelList.cpp
+    src/ui/CommunityMembersPanel.h
+    src/ui/CommunityMembersPanel.cpp
     src/ui/Composer.h
     src/ui/Composer.cpp
     src/ui/EmojiPanel.h
@@ -180,4 +198,23 @@ target_link_libraries(baka_client PRIVATE
 
 if(WIN32)
     set_target_properties(baka_client PROPERTIES WIN32_EXECUTABLE ON)
+endif()
+
+option(BUILD_CLIENT_TESTS "Build offline community behavior tests" OFF)
+if(BUILD_CLIENT_TESTS)
+    enable_testing()
+    set(TEST_SOURCES ${APP_SOURCES})
+    list(REMOVE_ITEM TEST_SOURCES src/main.cpp src/MainWindow.cpp src/MainWindowRequests.cpp src/MainWindowCommunitySettings.cpp src/MainWindowCommunityAssets.cpp)
+    qt_add_executable(community_behavior_tests tests/community_behavior.cpp ${TEST_SOURCES})
+    set_target_properties(community_behavior_tests PROPERTIES WIN32_EXECUTABLE OFF)
+    target_compile_definitions(community_behavior_tests PRIVATE
+        BAKA_TEST_STYLE="${CMAKE_CURRENT_SOURCE_DIR}/resources/style.qss")
+    target_include_directories(community_behavior_tests PRIVATE
+        "${CMAKE_CURRENT_BINARY_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/src" ${Protobuf_INCLUDE_DIR})
+    target_link_libraries(community_behavior_tests PRIVATE
+        Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Multimedia Qt6::WebSockets Qt6::Sql ${Protobuf_LIBRARIES})
+    qt_add_resources(community_behavior_tests "testAssets" PREFIX "/" BASE resources FILES
+        resources/style.qss resources/images/default_avatar.png resources/images/default_comm_avatar.png
+        resources/images/default_background.png resources/icons/settings.png)
+    add_test(NAME community_behavior COMMAND community_behavior_tests -platform offscreen)
 endif()

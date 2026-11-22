@@ -1,17 +1,118 @@
-// MainWindow 的一部分：设置窗口、邀请好友、入群 / 入社区申请的拉取与审批。
+// MainWindow 的一部分：设置窗口、社区页操作、邀请好友、入群 / 入社区申请的拉取与审批。
 // 单独放一个文件是为了不让 MainWindow.cpp 超过 400 行；类还是同一个 MainWindow。
 #include "MainWindow.h"
 
 #include "net/AvatarUploader.h"
 #include "net/ChatClient.h"
 #include "store/AvatarStore.h"
+#include "ui/CommunityPage.h"
 #include "ui/ContactPanel.h"
 #include "ui/HomePage.h"
+#include "ui/InputDialog.h"
 #include "ui/InviteDialog.h"
 #include "ui/PendingPage.h"
 #include "ui/SettingsDialog.h"
+#include <QStatusBar>
 
 #include <QRegularExpression>
+#include <QStackedWidget>
+
+// ---------------- 社区 ----------------
+
+// 点社区图标 / 主页里的社区行：中间区域切到社区页
+void MainWindow::openCommunity(const Community &community) {
+    m_contactPanel->showCommunitySidebar(true);
+    m_toolRail->setActiveCommunity(community.id);
+    m_communityPage->openCommunity(community, m_client->uid());
+    m_center->setCurrentWidget(m_communityPage);
+    for (int id : {community.avatarId, community.bannerId}) {
+        if (id > 0 && !m_communityImages.contains(id)) m_communityImageRequests.remove(id);
+    }
+    refreshCommunityAssets();
+}
+
+void MainWindow::createChannel(const Community &community) {
+    QStringList v;
+    if (!ask(tr("在「%1」创建频道").arg(community.name),
+             {tr("频道名称"), tr("频道分区（可不填）")}, &v)) return;
+    chat_proto::Envelope env;
+    env.set_type("create_channel");
+    env.set_community_id(community.id);
+    env.set_group_name(v[0].toStdString());
+    env.set_category((v[1].isEmpty() ? tr("一般") : v[1]).toStdString());
+    m_client->send(env);
+}
+
+// Web 社区设置：概览草稿保存，频道即时增删；权限由服务端校验
+// openCommunitySettings 的实现见 MainWindowCommunitySettings.cpp。
+
+// 与 Web 社区菜单一致：离开与设置里的解散是独立操作
+void MainWindow::leaveOrDissolve(const Community &community) {
+    // Web 菜单的离开始终是 leave_community，不因身份变成删除。
+    const QString tip = tr("确定离开「%1」？").arg(community.name);
+    if (!ask(tip, {})) return;
+
+    chat_proto::Envelope env;
+    env.set_type("leave_community");
+    env.set_community_id(community.id);
+    m_client->send(env);
+}
+
+// 社区页的全部入口接线：页面只发信号，请求统一在这里发
+void MainWindow::wireCommunityPage() {
+    connect(m_communityPage, &CommunityPage::inviteRequested, this, [this](const Community &community) {
+        inviteFriends(tr("邀请好友加入「%1」").arg(community.name), true, community.id);
+    });
+    connect(m_communityPage, &CommunityPage::settingsRequested, this, [this](const Community &community) {
+        openCommunitySettings(community);
+    });
+    connect(m_communityPage, &CommunityPage::leaveRequested, this, &MainWindow::leaveOrDissolve);
+    connect(m_communityPage, &CommunityPage::createChannelRequested, this, [this](const Community &community) {
+        openCommunitySettings(community, true);
+    });
+
+    connect(m_communityPage, &CommunityPage::renameChannelRequested, this,
+            [this](const Community &community, int channelId, const QString &name) {
+        QStringList v;
+        if (!ask(tr("重命名频道「#%1」").arg(name), {tr("新的频道名称")}, &v)) return;
+        if (v[0].isEmpty() || v[0] == name) return;
+        chat_proto::Envelope env;
+        env.set_type("modify_channel");
+        env.set_community_id(community.id);
+        env.set_channel_id(channelId);
+        env.set_group_name(v[0].toStdString());
+        // 服务端会连分区一起覆盖，所以把原来的分区带回去
+        env.set_category(m_communityPage->categoryOfChannel(channelId).toStdString());
+        m_client->send(env);
+    });
+    connect(m_communityPage, &CommunityPage::deleteChannelRequested, this,
+            [this](const Community &community, int channelId, const QString &name) {
+        if (!ask(tr("确定删除频道「#%1」？").arg(name), {})) return;
+        chat_proto::Envelope env;
+        env.set_type("delete_channel");
+        env.set_community_id(community.id);
+        env.set_channel_id(channelId);
+        m_client->send(env);
+    });
+
+    connect(m_communityPage, &CommunityPage::memberRoleChangeRequested, this,
+            [this](int uid, bool promote) {
+        chat_proto::Envelope env;
+        env.set_type("modify_community_member_role");
+        env.set_community_id(m_communityPage->community().id);
+        env.set_target_user_uid(uid);
+        env.set_promote(promote);
+        m_client->send(env);
+    });
+    connect(m_communityPage, &CommunityPage::removeMemberRequested, this, [this](int uid) {
+        if (!ask(tr("确定把 UID %1 移出社区？").arg(uid), {})) return;
+        chat_proto::Envelope env;
+        env.set_type("community_remove_member");
+        env.set_community_id(m_communityPage->community().id);
+        env.set_target_user_uid(uid);
+        m_client->send(env);
+    });
+}
 
 // 某个人的头像下好了 / 换了 / 被清除了（聊天页里的消息行由 ChatPage 自己刷新）
 void MainWindow::refreshAvatar(int uid) {
@@ -31,9 +132,20 @@ void MainWindow::refreshAvatar(int uid) {
 
 // 邀请好友：弹好友列表，点哪个好友的“邀请”就发一次请求（群聊 group_add_client / 社区 community_add_member）
 void MainWindow::inviteFriends(const QString &title, bool toCommunity, int targetId) {
+    if (toCommunity) {
+        for (const auto &community : m_communities) {
+            if (community.id == targetId && community.role != QLatin1String("owner")) {
+                statusBar()->showMessage(tr("只有社区所有者可以直接添加成员"), 5000);
+                return;
+            }
+        }
+    }
     QList<Contact> friends;
     for (const Contact &contact : m_contacts) {
-        if (!contact.isGroup) friends.append(contact);
+        if (contact.isGroup) continue;
+        if (toCommunity && m_communityPage->community().id == targetId
+                && m_communityPage->hasMember(contact.uid)) continue;
+        friends.append(contact);
     }
 
     InviteDialog dialog(title, friends, this);

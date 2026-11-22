@@ -15,6 +15,7 @@ public:
     InputDialog(const QString &title, const QStringList &fieldLabels, QWidget *parent = nullptr);
 
     QString value(int index) const;     // 第 index 个输入框的内容（已去掉首尾空白）
+    void setValue(int index, const QString &text);   // 预填（改现有值时用）
 
 private:
     QList<QLineEdit *> m_inputs;

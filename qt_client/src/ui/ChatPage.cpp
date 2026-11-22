@@ -88,7 +88,8 @@ ChatPage::ChatPage(ChatClient *client, AvatarStore *avatars, QWidget *parent)
         chat_proto::Envelope env;
         env.set_message(text.toStdString());
         env.set_target_uid(m_conv.uid);
-        env.set_type(m_conv.isGroup ? "group_chat" : "private_chat");
+        env.set_type(m_conv.isChannel ? "channel_chat"
+                                      : m_conv.isGroup ? "group_chat" : "private_chat");
         // 正在回复某条消息：带上它的 id，本地这条也先把引用显示出来
         if (m_replyTo.messageId > 0) {
             env.set_reply_to_message_id(m_replyTo.messageId);
@@ -132,11 +133,15 @@ void ChatPage::openConversation(const Contact &contact, int selfUid) {
         delete item;
     }
 
-    m_header->setText(contact.name);
+    m_header->setText(contact.isChannel ? QStringLiteral("# %1").arg(contact.name) : contact.name);
     m_composer->setEnabled(true);
-    m_composer->setPlaceholder(tr("向 %1 发送消息…").arg(contact.name));
+    m_composer->setPlaceholder(contact.isChannel
+                                   ? tr("发送消息到 #%1").arg(contact.name)
+                                   : tr("向 %1 发送消息…").arg(contact.name));
     requestHistory(0);
 }
+
+void ChatPage::setHeaderVisible(bool visible) { m_header->setVisible(visible); }
 
 void ChatPage::clear() {
     m_conv      = {};
@@ -166,8 +171,38 @@ void ChatPage::requestHistory(int beforeId) {
     env.set_type("history_request");
     env.set_peer_id(m_conv.uid);
     if (beforeId > 0) env.set_before_id(beforeId);
-    // 频道需要 is_channel=true，好友/群不带；频道入口在社区面板
+    // 频道历史要带 is_channel=true，好友 / 群不带
+    if (m_conv.isChannel) env.set_is_channel(true);
     m_client->send(env);
+}
+
+// 一条实时推送：私聊 / 群聊 / 频道的字段布局一样，统一在这里落后
+void ChatPage::appendIncoming(const chat_proto::Envelope &envelope) {
+    const int mid = envelope.message_id();
+    if (m_messageIds.contains(mid)) return;   // 已经显示过（历史页里可能先到）
+    m_messageIds.insert(mid);
+
+    Message msg;
+    msg.messageId  = mid;
+    msg.senderUid  = envelope.sender_uid();
+    msg.senderName = QString::fromStdString(envelope.sender_name());
+    msg.content    = QString::fromStdString(envelope.content());
+    msg.timestamp  = QString::fromStdString(envelope.timestamp());
+    fillFile(msg, envelope.is_file(), QString::fromStdString(envelope.file_id()).toInt(),
+             envelope.file_name(), envelope.file_size());
+    msg.isSelf     = (envelope.sender_uid() == m_selfUid);
+    msg.replyToId = envelope.reply_to().message_id();
+    msg.replyToSenderName = QString::fromStdString(envelope.reply_to().sender_name());
+    msg.replyToContent = QString::fromStdString(envelope.reply_to().content());
+
+    // 群聊 / 频道的推送也发给发送者自己（自己给自己私聊也一样）：用它确认那条乐观消息，不再重复添加
+    if (msg.isSelf && !m_pendingIds.isEmpty()) {
+        confirmPending(mid);
+        return;
+    }
+    const bool follow = isAtBottom();   // 用户在往上翻旧消息时不打断他
+    appendMessages({msg});
+    if (follow) scrollToBottom();
 }
 
 void ChatPage::handleEnvelope(const chat_proto::Envelope &envelope) {
@@ -206,50 +241,14 @@ void ChatPage::handleEnvelope(const chat_proto::Envelope &envelope) {
         return;
     }
 
-    // 实时推送：私聊（对方发来）
-    if (type == QStringLiteral("private_chat") && !m_conv.isGroup
-            && envelope.sender_uid() == m_conv.uid) {
-        const int mid = envelope.message_id();
-        if (m_messageIds.contains(mid)) return;
-        m_messageIds.insert(mid);
-        Message msg;
-        msg.messageId  = mid;
-        msg.senderUid  = envelope.sender_uid();
-        msg.senderName = QString::fromStdString(envelope.sender_name());
-        msg.content    = QString::fromStdString(envelope.content());
-        msg.timestamp  = QString::fromStdString(envelope.timestamp());
-        fillFile(msg, envelope.is_file(), QString::fromStdString(envelope.file_id()).toInt(),
-                 envelope.file_name(), envelope.file_size());
-        msg.isSelf     = false;
-        const bool follow = isAtBottom();   // 用户在往上翻旧消息时不打断他
-        appendMessages({msg});
-        if (follow) scrollToBottom();
-        return;
-    }
-
-    // 实时推送：群聊（服务端广播给全员，含自己发的）
-    if (type == QStringLiteral("Group_Chat") && m_conv.isGroup
-            && envelope.group_uid() == m_conv.uid) {
-        const int mid = envelope.message_id();
-        if (m_messageIds.contains(mid)) return;
-        m_messageIds.insert(mid);
-        Message msg;
-        msg.messageId  = mid;
-        msg.senderUid  = envelope.sender_uid();
-        msg.senderName = QString::fromStdString(envelope.sender_name());
-        msg.content    = QString::fromStdString(envelope.content());
-        msg.timestamp  = QString::fromStdString(envelope.timestamp());
-        fillFile(msg, envelope.is_file(), QString::fromStdString(envelope.file_id()).toInt(),
-                 envelope.file_name(), envelope.file_size());
-        msg.isSelf     = (envelope.sender_uid() == m_selfUid);
-        // 群聊推送是确认：把对应乐观消息升级为已发送
-        if (msg.isSelf && !m_pendingIds.isEmpty()) {
-            confirmPending(mid);
-            return;  // 已有乐观占位，不重复添加
-        }
-        const bool follow = isAtBottom();
-        appendMessages({msg});
-        if (follow) scrollToBottom();
+    // 实时推送：私聊 / 群聊 / 频道（同一个会话只接对应的那一种）
+    if ((type == QStringLiteral("private_chat") && !m_conv.isGroup && !m_conv.isChannel
+                && envelope.sender_uid() == m_conv.uid)
+            || (type == QStringLiteral("Group_Chat") && m_conv.isGroup
+                && envelope.group_uid() == m_conv.uid)
+            || (type == QStringLiteral("Channel_Chat") && m_conv.isChannel
+                && envelope.group_uid() == m_conv.uid)) {
+        appendIncoming(envelope);
         return;
     }
 
@@ -273,6 +272,7 @@ bool ChatPage::handleSystemText(const QString &text) {
 
     QRegularExpressionMatch m = sentRe.match(text);
     if (m.hasMatch()) {
+        if (m_pendingIds.isEmpty()) return false;
         confirmPending(m.captured(1).toInt());
         return true;
     }

@@ -16,10 +16,12 @@ public:
     // “＋”按钮菜单里的五项（和 web 端 .community-menu 一致）
     enum class AddAction { CreateCommunity, CreateGroup, JoinCommunity, JoinGroup, AddFriend };
     // 社区图标右键菜单里的项
-    enum class CommunityAction { Invite, CreateChannel, Leave };
+    enum class CommunityAction { Invite, CreateChannel, Settings, Leave };
 
     explicit ToolRail(QWidget *parent = nullptr);
 
+    void setCommunityAvatar(int id, const QPixmap &avatar);
+    void setActiveCommunity(int id);   // 0 = 首页，社区 id = Web 竖栏当前项
     void setCommunities(const QList<Community> &communities);   // 整份替换社区图标；传空列表即清空
 
 signals:
@@ -37,6 +39,7 @@ private:
     void showAddMenu();
     void showCommunityMenu(const Community &community, const QPoint &globalPos);
 
+    int m_activeCommunityId = 0;
     QVBoxLayout *m_layout = nullptr;
     QPushButton *m_logoButton = nullptr;
     QPushButton *m_addButton = nullptr;           // 社区图标下面的“＋”

@@ -20,6 +20,7 @@ public:
     // 服务端说“uid 这个人的头像是 fileId”（<= 0 表示没设置头像）。需要的话会去下载
     void ensure(int uid, int fileId);
     QString path(int uid) const;        // uid 的本地头像文件；没有返回空字符串
+    FileDownloader *downloader() const { return m_downloader; } // 图片预览复用同一下载队列
 
 signals:
     void avatarChanged(int uid);        // uid 的本地头像文件变了（下完 / 被清除），path(uid) 是新值

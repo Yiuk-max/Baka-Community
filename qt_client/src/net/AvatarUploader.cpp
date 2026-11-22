@@ -42,8 +42,13 @@ AvatarUploader::AvatarUploader(ChatClient *client, QObject *parent)
 }
 
 void AvatarUploader::upload(const QByteArray &png) {
+    uploadImage(png, false);
+}
+
+void AvatarUploader::uploadImage(const QByteArray &png, bool banner) {
     if (isBusy() || png.isEmpty()) return;
 
+    m_banner = banner;
     m_data = png;
     m_state = State::Init;
     m_transferId = 0;
@@ -54,10 +59,10 @@ void AvatarUploader::upload(const QByteArray &png) {
     chat_proto::Envelope env;
     env.set_type("file_upload_init");
     auto *meta = env.mutable_file_meta();
-    meta->set_original_name(kAvatarName);
+    meta->set_original_name(m_banner ? "banner.png" : kAvatarName);
     meta->set_mime_type(kAvatarMime);
     meta->set_size(static_cast<quint64>(m_data.size()));
-    meta->set_type("avatar");   // 服务端按这个值走头像大小限制、也决定存储目录
+    meta->set_type(m_banner ? "image" : "avatar");   // 服务端按这个值走头像大小限制、也决定存储目录
     m_client->send(env);
 }
 
@@ -124,7 +129,7 @@ void AvatarUploader::sendChunks() {
         auto *meta = env.mutable_meta();
         meta->set_type("file_chunk");
         meta->set_transfer_id(std::to_string(m_transferId));
-        meta->set_filename(kAvatarName);
+        meta->set_filename(m_banner ? "banner.png" : kAvatarName);
         meta->set_total_size(static_cast<quint64>(m_data.size()));
         meta->set_chunk_index(index);
         meta->set_chunk_count(m_chunkCount);

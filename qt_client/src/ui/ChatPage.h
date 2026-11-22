@@ -30,6 +30,7 @@ public:
     void openConversation(const Contact &contact, int selfUid);
     // 退出登录时清空
     void clear();
+    void setHeaderVisible(bool visible);   // 社区复用统一顶部栏，不重复显示会话标题
 
     // MainWindow 把 envelopeReceived 里的相关消息路由到这里
     void handleEnvelope(const chat_proto::Envelope &envelope);
@@ -39,6 +40,7 @@ public:
 private:
     void requestHistory(int beforeId = 0);
     void appendMessages(const QList<Message> &msgs, bool prepend = false);
+    void appendIncoming(const chat_proto::Envelope &envelope);   // 一条实时推送（私聊 / 群聊 / 频道）
     MessageRow *buildMessageWidget(const Message &msg);
     void showMessageMenu(MessageRow *row, const QPoint &globalPos);   // 消息右键菜单
     void confirmPending(int realId);    // 最早的一条乐观消息得到确认

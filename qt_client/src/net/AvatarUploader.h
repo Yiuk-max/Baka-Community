@@ -23,6 +23,7 @@ public:
     explicit AvatarUploader(ChatClient *client, QObject *parent = nullptr);
 
     void upload(const QByteArray &png);   // 正在传的时候再调会被忽略
+    void uploadImage(const QByteArray &png, bool banner); // 社区背景按 image 类型上传
     bool isBusy() const { return m_state != State::Idle; }
 
 signals:
@@ -41,6 +42,7 @@ private:
     QTimer *m_timeout = nullptr;     // 每一步等回复的超时，防止界面一直卡在“上传中”
     State m_state = State::Idle;
     QByteArray m_data;               // 待上传的 PNG
+    bool m_banner = false;
     int m_transferId = 0;
     quint32 m_chunkSize = 0;
     quint32 m_chunkCount = 0;

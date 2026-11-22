@@ -49,6 +49,12 @@ QStatusBar::item {
     border: 0;
     border-radius: 16px;
 }
+#railCommunityButton:checked {
+    border: 2px solid #f2f3f5;
+}
+#railLogoButton:checked {
+    background: #5865f2;
+}
 /*通讯录：搜索框*/
 #contactSearch {
     background: #17171a;
@@ -176,8 +182,8 @@ QStatusBar::item {
 }
 /*设置页面里的一行*/
 #settingsRow {
-    background: #202024;
-    border: 1px solid #29292d;
+    background: #26262b;
+    border: 1px solid #35353c;
     border-radius: 8px;
 }
 /*裁剪头像窗口的卡片*/
@@ -786,4 +792,193 @@ QMenu#appMenu::separator {
 #inviteScroll, #inviteList {
     background: transparent;
     border: 0;
+}
+
+/* ---- 社区页 ---- */
+/*整页底色：左边频道栏深一档，右边内容区正常*/
+#communityPage {
+    background: #1a1a1e;
+}
+#communitySidebar {
+    background: #121214;
+}
+/*频道栏顶部：社区头像 + 名称 + 小按钮*/
+#communitySidebarHeader {
+    background: #121214;
+    border-bottom: 1px solid #1e1e22;
+}
+#communitySidebarName {
+    color: #f2f3f5;
+    font-weight: 700;
+}
+#communitySidebarTitleButton {
+    background: transparent;
+    border: 0;
+    color: #f2f3f5;
+    font-weight: 700;
+    text-align: left;
+}
+#communityChatHeader {
+    background: #1a1a1e;
+    border-bottom: 1px solid #252529;
+}
+/*频道栏顶部的小圆按钮（＋ / 设置）*/
+#communityIconButton {
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    color: #b5bac1;
+}
+#communityIconButton:hover {
+    background: #2b2b2f;
+    color: #f2f3f5;
+}
+/*频道栏里的导航行（社区成员 / 服务器指南）*/
+#communityNavRow {
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    color: #949ba4;
+    text-align: left;
+    padding-left: 10px;
+}
+#communityNavRow:hover {
+    background: #222225;
+    color: #f2f3f5;
+}
+#communityNavRow:checked {
+    background: #2c2c30;
+    color: #f2f3f5;
+    font-weight: 600;
+}
+/*频道列表的滚动区和容器：透明，透出频道栏底色*/
+#communityChannelScroll, #communityChannelContainer {
+    background: transparent;
+    border: 0;
+}
+/*频道分组标题（分区名）*/
+#communityCategory {
+    color: #7f8590;
+    font-size: 11px;
+    font-weight: 700;
+    padding-left: 10px;
+    padding-top: 6px;
+}
+/*一行频道*/
+#communityChannelRow {
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    color: #949ba4;
+    text-align: left;
+    padding-left: 10px;
+}
+#communityChannelRow:hover {
+    background: #222225;
+    color: #f2f3f5;
+}
+#communityChannelRow:checked {
+    background: #2c2c30;
+    color: #ffffff;
+    font-weight: 600;
+}
+#communityChannelsEmpty {
+    color: #7f8590;
+    font-size: 12px;
+    padding-left: 10px;
+}
+/*服务器指南页*/
+#communityGuideScroll, #communitySettingsScroll {
+    background: transparent;
+    border: 0;
+}
+#communitySettingsContainer {
+    background: #1a1a1e;
+}
+#communityGuide {
+    background: #1a1a1e;
+}
+#communityGuideName {
+    color: #f2f3f5;
+    font-size: 28px;
+    font-weight: 800;
+}
+#communityGuideDesc {
+    color: #b5bac1;
+    font-size: 14px;
+}
+#communityGuideStats {
+    color: #949ba4;
+    font-size: 12px;
+}
+/*右侧成员面板*/
+#communityMembers {
+    background: #17171a;
+    border-left: 1px solid #252529;
+}
+#communityMembersHeader {
+    background: #17171a;
+    border-bottom: 1px solid #252529;
+}
+#communityMembersTitle {
+    color: #f2f3f5;
+    font-weight: 700;
+}
+#communityMembersCount {
+    color: #949ba4;
+    font-size: 12px;
+}
+#communityMembersScroll, #communityMembersContainer {
+    background: transparent;
+    border: 0;
+}
+#communityMembersGroup {
+    color: #7f8590;
+    font-size: 11px;
+    font-weight: 700;
+    padding-left: 4px;
+}
+#communityMemberRow {
+    background: transparent;
+    border-radius: 4px;
+}
+#communityMemberRow:hover {
+    background: #222225;
+}
+#communityMemberName {
+    color: #dcddde;
+}
+#communityMemberTag {
+    color: #949ba4;
+    font-size: 11px;
+}
+#communityMembersEmpty {
+    color: #7f8590;
+    font-size: 12px;
+}
+
+/* ---- 社区设置弹窗：重构后的补充样式 ---- */
+#communitySettingsDialog QScrollBar:vertical {
+    background: #17171a;
+    width: 8px;
+}
+#communitySettingsDialog QScrollBar::handle:vertical {
+    background: #3a3a40;
+    border-radius: 4px;
+    min-height: 24px;
+}
+#communitySettingsDialog QScrollBar::add-line:vertical,
+#communitySettingsDialog QScrollBar::sub-line:vertical {
+    height: 0;
+    background: transparent;
+}
+#communitySettingsDialog QScrollBar::add-page:vertical,
+#communitySettingsDialog QScrollBar::sub-page:vertical {
+    background: transparent;
+}
+/*背景图片预览框：圆角 + 深一档边框，避免和卡片底色糊在一起*/
+#settingsBannerPreview {
+    background: #17171a;
+    border: 1px solid #29292d;
+    border-radius: 6px;
 }

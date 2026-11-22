@@ -10,6 +10,7 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QSignalBlocker>
+#include <QStackedWidget>
 #include <QVBoxLayout>
 
 namespace {
@@ -28,8 +29,15 @@ ContactPanel::ContactPanel(QWidget *parent) : QWidget(parent) {
     m_groupIcon = avatar::roundedIcon(assets::defaultGroupAvatar(), kAvatarSize, kAvatarSize / 2);
 
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(8, 10, 8, 8);
+    layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
+    m_sidebars = new QStackedWidget;
+    auto *direct = new QWidget;
+    auto *directLayout = new QVBoxLayout(direct);
+    directLayout->setContentsMargins(8, 10, 8, 0);
+    directLayout->setSpacing(0);
+    m_sidebars->addWidget(direct);
+    layout->addWidget(m_sidebars, 1);
 
     // 搜索框：在已加载的联系人里按名字过滤（不发请求）
     m_search = new QLineEdit;
@@ -37,15 +45,15 @@ ContactPanel::ContactPanel(QWidget *parent) : QWidget(parent) {
     m_search->setPlaceholderText(tr("搜索好友或群聊"));
     m_search->setFixedHeight(36);
     m_search->setClearButtonEnabled(true);
-    layout->addWidget(m_search);
+    directLayout->addWidget(m_search);
 
-    layout->addSpacing(14);
+    directLayout->addSpacing(14);
     auto *heading = new QLabel(tr("私信"));
     heading->setObjectName("contactHeading");
     heading->setContentsMargins(8, 0, 0, 0);
-    layout->addWidget(heading);
+    directLayout->addWidget(heading);
 
-    layout->addSpacing(6);
+    directLayout->addSpacing(6);
     m_list = new QListWidget;
     m_list->setObjectName("contactList");
     m_list->setIconSize(QSize(kAvatarSize, kAvatarSize));
@@ -54,7 +62,7 @@ ContactPanel::ContactPanel(QWidget *parent) : QWidget(parent) {
     m_list->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     m_list->setFocusPolicy(Qt::NoFocus);                            // 不要选中项外面的虚线框
     m_list->setSpacing(1);
-    layout->addWidget(m_list, 1);
+    directLayout->addWidget(m_list, 1);
 
     // 底部账号栏：自己的头像 + 昵称 + 在线状态
     layout->addSpacing(8);
@@ -90,13 +98,25 @@ ContactPanel::ContactPanel(QWidget *parent) : QWidget(parent) {
     settingsButton->setCursor(Qt::PointingHandCursor);
     settingsButton->setToolTip(tr("设置"));
     accountLayout->addWidget(settingsButton);
-    layout->addWidget(accountBar);
+    auto *accountWrap = new QWidget;
+    auto *accountWrapLayout = new QVBoxLayout(accountWrap);
+    accountWrapLayout->setContentsMargins(8, 0, 8, 8);
+    accountWrapLayout->addWidget(accountBar);
+    layout->addWidget(accountWrap);
 
     connect(settingsButton, &QPushButton::clicked, this, &ContactPanel::settingsClicked);
     connect(m_search, &QLineEdit::textChanged, this, &ContactPanel::rebuildList);
     connect(m_list, &QListWidget::currentRowChanged, this, &ContactPanel::onCurrentRowChanged);
     m_list->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_list, &QListWidget::customContextMenuRequested, this, &ContactPanel::showContextMenu);
+}
+
+void ContactPanel::setCommunitySidebar(QWidget *sidebar) {
+    m_sidebars->addWidget(sidebar);
+}
+
+void ContactPanel::showCommunitySidebar(bool community) {
+    m_sidebars->setCurrentIndex(community ? 1 : 0);
 }
 
 void ContactPanel::showContextMenu(const QPoint &pos) {

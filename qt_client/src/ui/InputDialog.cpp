@@ -73,5 +73,12 @@ InputDialog::InputDialog(const QString &title, const QStringList &fieldLabels, Q
 }
 
 QString InputDialog::value(int index) const {
-    return m_inputs.value(index) ? m_inputs.at(index)->text().trimmed() : QString();
+    return m_inputs.value(index) ? m_inputs.at(index)->text().trimmed() : QString();//trimmed()去除字符串首尾的空白字符
+}
+
+void InputDialog::setValue(int index, const QString &text) {
+    if (QLineEdit *input = m_inputs.value(index)) {
+        input->setText(text);
+        input->selectAll();   // 选中旧值，直接输入就是替换
+    }
 }

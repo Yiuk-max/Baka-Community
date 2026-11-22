@@ -4,6 +4,7 @@
 #include "net/FileDownloader.h"
 #include "store/AvatarStore.h"
 #include "ui/ChatPage.h"
+#include "ui/CommunityPage.h"
 #include "ui/ContactPanel.h"
 #include "ui/HomePage.h"
 #include "ui/InputDialog.h"
@@ -18,7 +19,6 @@
 #include <QTime>
 #include <QTimer>
 #include <QWidget>
-
 MainWindow::MainWindow(ChatClient *client, QWidget *parent)
     : QMainWindow(parent), m_client(client) {
     setWindowTitle(tr("Baka Community"));
@@ -44,8 +44,11 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
     m_center = new QStackedWidget(central);
     m_homePage = new HomePage(m_center);
     m_chatPage = new ChatPage(m_client, m_avatars, m_center);
+    m_communityPage = new CommunityPage(m_client, m_avatars, m_center);
     m_center->addWidget(m_homePage);
     m_center->addWidget(m_chatPage);
+    m_center->addWidget(m_communityPage);
+    m_contactPanel->setCommunitySidebar(m_communityPage->sidebar());
     layout->addWidget(m_center, 1);   // 伸展因子1，剩余宽度全给中间
 
     setCentralWidget(central);
@@ -82,12 +85,11 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
     });
     connect(m_toolRail, &ToolRail::addActionTriggered, this, &MainWindow::handleAddAction);
     connect(m_toolRail, &ToolRail::communityActionTriggered, this, &MainWindow::handleCommunityAction);
-    auto communityNotReady = [this](const Community &community) {
-        statusBar()->showMessage(tr("社区「%1」（社区页还没做）").arg(community.name), 5000);
-    };
-    connect(m_homePage, &HomePage::communityActivated, this, communityNotReady);
-    connect(m_toolRail, &ToolRail::communityClicked, this, communityNotReady);
-
+    // 点社区图标 / 主页里的社区行：打开社区页
+    connect(m_homePage, &HomePage::communityActivated, this, &MainWindow::openCommunity);
+    connect(m_toolRail, &ToolRail::communityClicked, this, &MainWindow::openCommunity);
+    wireCommunityPage();      // 社区页的入口 / 频道 / 成员操作（实现见 MainWindowRequests.cpp）
+    wireCommunityAssets();
     connect(m_client, &ChatClient::loginSucceeded, this, [this] {
         statusBar()->showMessage(tr("已登录 %1（UID %2）/ 服务器 %3")
                                      .arg(m_client->username())
@@ -114,9 +116,12 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
         m_homePage->clear();
         m_contacts.clear();
         m_communities.clear();
+        m_communityImages.clear();
+        m_communityImageRequests.clear();
         m_chatPage->clear();
+        m_communityPage->clear();
         m_avatars->setUser(0);
-        m_center->setCurrentWidget(m_homePage);
+        showHome();
     });
 
     connect(m_client, &ChatClient::connected, this, [this] { m_contactPanel->setOnline(true); });
@@ -154,11 +159,15 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
 }
 
 void MainWindow::openChat(const Contact &contact) {
+    m_contactPanel->showCommunitySidebar(false);
+    m_toolRail->setActiveCommunity(0);
     m_chatPage->openConversation(contact, m_client->uid());
     m_center->setCurrentWidget(m_chatPage);
 }
 
 void MainWindow::showHome() {
+    m_contactPanel->showCommunitySidebar(false);
+    m_toolRail->setActiveCommunity(0);
     m_contactPanel->clearSelection();
     m_center->setCurrentWidget(m_homePage);
 }
@@ -237,26 +246,20 @@ void MainWindow::handleAddAction(ToolRail::AddAction action) {
 }
 
 void MainWindow::handleCommunityAction(const Community &community, ToolRail::CommunityAction action) {
-    chat_proto::Envelope env;
-    env.set_community_id(community.id);
-    QStringList v;
     switch (action) {
     case ToolRail::CommunityAction::Invite:
         inviteFriends(tr("邀请好友加入「%1」").arg(community.name), true, community.id);
         return;
     case ToolRail::CommunityAction::CreateChannel:
-        if (!ask(tr("在「%1」创建频道").arg(community.name),
-                 {tr("频道名称"), tr("频道分区（可不填）")}, &v)) return;
-        env.set_type("create_channel");
-        env.set_group_name(v[0].toStdString());
-        env.set_category((v[1].isEmpty() ? tr("一般") : v[1]).toStdString());
-        break;
+        openCommunitySettings(community, true);
+        return;
+    case ToolRail::CommunityAction::Settings:
+        openCommunitySettings(community);
+        return;
     case ToolRail::CommunityAction::Leave:
-        if (!ask(tr("确定离开「%1」？").arg(community.name), {})) return;
-        env.set_type("leave_community");
-        break;
+        leaveOrDissolve(community);
+        return;
     }
-    m_client->send(env);
 }
 
 // show_friend_requests 的回复是一段文本，每行 "[昵称] (UID): 留言"
@@ -284,7 +287,7 @@ void MainWindow::refreshAfter(const QString &text) {
     static const QRegularExpression groupsRe(QStringLiteral(
         "Group created|Group deleted|Group name updated|added to group|removed from group"));
     static const QRegularExpression communitiesRe(QStringLiteral(
-        "Community created|Community deleted|Community updated|added to community|left community"));
+        "Community created|Community deleted|Community updated|added to community|left community|removed from community"));
 
     const bool friends = friendsRe.match(text).hasMatch();
     const bool contacts = friends || groupsRe.match(text).hasMatch();
@@ -340,31 +343,57 @@ void MainWindow::handleEnvelope(const chat_proto::Envelope &envelope) {
             Community community;
             community.id = info.community_id();
             community.name = QString::fromStdString(info.name());
+            community.description = QString::fromStdString(info.description());
             community.avatarId = info.avatar_id();
+            community.bannerId = info.banner_id();
             community.role = QString::fromStdString(info.my_role());
             communities.append(community);
         }
         m_toolRail->setCommunities(communities);
         m_homePage->setCommunities(communities);
         m_communities = communities;
+        // 开着的社区页跟着刷新；如果这个社区已经不在了（解散 / 被移除），退回主页
+        const int openId = m_communityPage->community().id;
+        if (openId > 0) {
+            bool stillThere = false;
+            for (const Community &community : std::as_const(communities)) {
+                if (community.id != openId) continue;
+                m_communityPage->updateCommunity(community);
+                stillThere = true;
+            }
+            if (!stillThere) {
+                m_communityPage->clear();
+                showHome();
+            }
+        }
+        refreshCommunityAssets();
         requestCommunityRequests();
         return;
     }
 
-    // 聊天相关消息路由给 ChatPage
+    // 社区页自己的列表 / 成员回复
+    if (type == QStringLiteral("channel_list_response") ||
+        type == QStringLiteral("community_member_list_response")) {
+        m_communityPage->handleEnvelope(envelope);
+        return;
+    }
+
+    // 聊天相关消息路由给 ChatPage（私聊 / 群）和社区页里的频道聊天页
     if (type == QStringLiteral("history_response") ||
         type == QStringLiteral("private_chat") ||
         type == QStringLiteral("Group_Chat") ||
         type == QStringLiteral("Channel_Chat") ||
         type == QStringLiteral("delete_message")) {
         m_chatPage->handleEnvelope(envelope);
+        m_communityPage->handleEnvelope(envelope);
         return;
     }
 
-    // system 文本：先给聊天页（发送确认 / 撤回），再看是不是好友申请列表，其余显示到状态栏
+    // system 文本：先给两个聊天页（发送确认 / 撤回），再看是不是申请列表，其余显示到状态栏
     if (type == QStringLiteral("system")) {
         const QString text = QString::fromStdString(envelope.content()).trimmed();
         if (m_chatPage->handleSystemText(text)) return;
+        if (m_communityPage->handleSystemText(text)) return;
         if (handleFriendRequestList(text)) return;
         if (handleJoinRequestList(text)) return;
         refreshAfter(text);

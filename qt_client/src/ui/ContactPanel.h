@@ -12,6 +12,7 @@
 class QLabel;
 class QLineEdit;
 class QListWidget;
+class QStackedWidget;
 
 class ContactPanel : public QWidget {
     Q_OBJECT
@@ -25,6 +26,8 @@ public:
     void clear();                                       // 退出登录时清空
     void select(const Contact &contact);                // 从别处（主页）打开了会话：把这一行标成选中，不发信号
     void clearSelection();                              // 回到主页时取消选中，这样再点同一行还能打开会话
+    void setCommunitySidebar(QWidget *sidebar);         // 社区侧栏与私信内容原位切换，底部账号栏共用
+    void showCommunitySidebar(bool community);
 
 signals:
     void contactSelected(const Contact &contact);       // 用户点了某个好友 / 群
@@ -36,6 +39,7 @@ private:
     void rebuildList();                                 // 按 m_contacts + 搜索关键字重建列表
     void onCurrentRowChanged(int row);
 
+    QStackedWidget *m_sidebars = nullptr;
     QLineEdit *m_search = nullptr;
     QListWidget *m_list = nullptr;
     QLabel *m_accountAvatar = nullptr;

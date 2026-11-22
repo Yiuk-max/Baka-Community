@@ -85,11 +85,12 @@ void ToolRail::showAddMenu() {
     if (chosen) emit addActionTriggered(static_cast<AddAction>(chosen->data().toInt()));
 }
 
-// 社区右键菜单：web 端的“社区设置”是一整个设置页，这边还没有，所以没放
+// 社区右键菜单：和社区页里的入口一致
 void ToolRail::showCommunityMenu(const Community &community, const QPoint &globalPos) {
     QMenu menu(this);
     menus::prepare(&menu);
     QAction *invite = menu.addAction(tr("邀请至社区"));
+    QAction *settings = menu.addAction(tr("社区设置"));
     menu.addSeparator();
     QAction *createChannel = menu.addAction(tr("创建频道"));
     menu.addSeparator();
@@ -98,7 +99,16 @@ void ToolRail::showCommunityMenu(const Community &community, const QPoint &globa
     QAction *chosen = menu.exec(globalPos);
     if (chosen == invite) emit communityActionTriggered(community, CommunityAction::Invite);
     else if (chosen == createChannel) emit communityActionTriggered(community, CommunityAction::CreateChannel);
+    else if (chosen == settings) emit communityActionTriggered(community, CommunityAction::Settings);
     else if (chosen == leave) emit communityActionTriggered(community, CommunityAction::Leave);
+}
+
+void ToolRail::setActiveCommunity(int id) {
+    m_activeCommunityId = id;
+    m_logoButton->setCheckable(true);
+    m_logoButton->setChecked(id == 0);
+    for (auto *button : m_communityButtons)
+        button->setChecked(button->property("communityId").toInt() == id);
 }
 
 void ToolRail::setCommunities(const QList<Community> &communities) {
@@ -110,6 +120,9 @@ void ToolRail::setCommunities(const QList<Community> &communities) {
     for (const Community &community : communities) {
         auto *button = new QPushButton;
         button->setObjectName("railCommunityButton");
+        button->setProperty("communityId", community.id);
+        button->setCheckable(true);
+        button->setChecked(community.id == m_activeCommunityId);
         button->setFixedSize(48, 48);
         button->setIcon(icon);
         button->setIconSize(QSize(48, 48));
@@ -131,6 +144,12 @@ void ToolRail::setCommunities(const QList<Community> &communities) {
         // 插在“＋”按钮和末尾的弹簧之前
         m_communityLayout->insertWidget(m_communityLayout->count() - 2, button, 0, Qt::AlignHCenter);
         m_communityButtons.append(button);
+    }
+}
+
+void ToolRail::setCommunityAvatar(int id, const QPixmap &avatar) {
+    for (auto *button : m_communityButtons) {
+        if (button->property("communityId").toInt() == id) button->setIcon(QIcon(avatar));
     }
 }
 
