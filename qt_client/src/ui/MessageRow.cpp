@@ -43,17 +43,35 @@ MessageRow::MessageRow(const Message &msg, MediaStore *media, QWidget *parent)
     hLayout->addWidget(nameLabel);
     hLayout->addWidget(timeLabel);
     hLayout->addStretch();
-    cLayout->addLayout(hLayout);
-
     // 回复引用（如有）
-    if (msg.replyToId > 0 && !msg.replyToContent.isEmpty()) {
-        auto *quote = new QLabel(
-            QStringLiteral("↩ ") + msg.replyToSenderName + QStringLiteral(": ") + msg.replyToContent,
-            this);
+    if (msg.replyToId > 0) {
+        auto *quote = new QToolButton(this);
         quote->setObjectName("msgQuote");
-        quote->setWordWrap(true);
+        quote->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+        quote->setCursor(Qt::PointingHandCursor);
+        quote->setToolTip(tr("跳到原消息"));
+        auto *quoteLayout = new QHBoxLayout(quote);
+        quoteLayout->setContentsMargins(0, 0, 0, 2);
+        quoteLayout->setSpacing(5);
+        auto *label = new QLabel(tr("回复"), quote);
+        label->setObjectName("msgReplyLabel");
+        m_quoteAvatar = new QLabel(quote);
+        m_quoteAvatar->setPixmap(avatar::user({}, 16));
+        m_quoteName = new QLabel(QStringLiteral("@%1").arg(msg.replyToSenderName), quote);
+        m_quoteName->setObjectName("msgReplyName");
+        m_quoteText = new QLabel(msg.replyToContent.simplified().isEmpty()
+                                     ? tr("附件 / 原消息") : msg.replyToContent.simplified(), quote);
+        m_quoteText->setObjectName("msgReplyText");
+        m_quoteText->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+        for (auto *item : {label, m_quoteAvatar, m_quoteName, m_quoteText}) {
+            item->setTextFormat(Qt::PlainText);
+            item->setAttribute(Qt::WA_TransparentForMouseEvents);
+            quoteLayout->addWidget(item, item == m_quoteText ? 1 : 0);
+        }
+        connect(quote, &QToolButton::clicked, this, [this] { emit replyActivated(m_msg.replyToId); });
         cLayout->addWidget(quote);
     }
+    cLayout->addLayout(hLayout);
 
     // 文件消息显示附件，不显示正文
     if (msg.isFile) {
@@ -92,6 +110,20 @@ void MessageRow::confirm(int realId) {
     m_text->setObjectName("msgText");
     m_text->style()->unpolish(m_text);
     m_text->style()->polish(m_text);
+}
+
+QString MessageRow::replyPreview(const Message &message) {
+    if (message.isFile)
+        return message.fileName.isEmpty() ? tr("附件") : message.fileName;
+    return message.content.simplified();
+}
+
+void MessageRow::setReplySource(const Message &source, const QString &avatarPath) {
+    if (!m_quoteText || source.messageId != m_msg.replyToId) return;
+    m_quoteName->setText(QStringLiteral("@%1").arg(source.senderName));
+    m_quoteAvatar->setPixmap(avatar::user(avatarPath, 16));
+    m_quoteText->setText(replyPreview(source));
+    m_quoteText->setToolTip(replyPreview(source));
 }
 
 void MessageRow::setAvatar(const QString &path) {

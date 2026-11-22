@@ -468,10 +468,31 @@ Spinner {
 }
 /*回复引用块*/
 #msgQuote {
-    color: #949ba4;
+    background: transparent;
+    border: 0;
+    color: #b5bac1;
     font-size: 13px;
-    border-left: 3px solid #4f545c;
-    padding-left: 8px;
+}
+#msgReplyLabel {
+    background: transparent;
+    color: #8b8d96;
+    font-size: 12px;
+    font-weight: 600;
+}
+#msgReplyName {
+    background: transparent;
+    color: #b5bac1;
+    font-weight: 500;
+}
+#msgReplyText {
+    background: transparent;
+    color: #b5bac1;
+}
+#msgQuote:hover #msgReplyText {
+    text-decoration: underline;
+}
+#messageRowFlash {
+    background: #2b2d33;
 }
 /*底部输入框外层（只留边距，底色和聊天页一样）*/
 #composerOuter {

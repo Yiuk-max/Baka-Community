@@ -21,9 +21,12 @@ public:
     void confirm(int realId);
     // 换成本地头像文件；path 为空就是默认头像
     void setAvatar(const QString &path);
+    static QString replyPreview(const Message &message);
+    void setReplySource(const Message &source, const QString &avatarPath);
 
 signals:
     void menuRequested(const QPoint &globalPos);
+    void replyActivated(int messageId);
 
 protected:
     void contextMenuEvent(QContextMenuEvent *event) override;
@@ -36,4 +39,7 @@ private:
     Message m_msg;
     QLabel *m_avatar = nullptr;
     QLabel *m_text = nullptr;       // 文件消息没有正文，这时是 nullptr
+    QLabel *m_quoteAvatar = nullptr;
+    QLabel *m_quoteName = nullptr;
+    QLabel *m_quoteText = nullptr;
 };

@@ -19,6 +19,7 @@
 #include <QRegularExpression>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QStyle>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -96,7 +97,7 @@ ChatPage::ChatPage(ChatClient *client, AvatarStore *avatars, MediaStore *media, 
             env.set_reply_to_message_id(m_replyTo.messageId);
             opt.replyToId         = m_replyTo.messageId;
             opt.replyToSenderName = m_replyTo.senderName;
-            opt.replyToContent    = m_replyTo.content;
+            opt.replyToContent    = MessageRow::replyPreview(m_replyTo);
             m_replyTo = {};
             m_composer->clearReplyTarget();
         }
@@ -152,9 +153,7 @@ void ChatPage::openConversation(const Contact &contact, int selfUid) {
                                    : tr("向 %1 发送消息…").arg(contact.name));
     requestHistory(0);
 }
-
 void ChatPage::setHeaderVisible(bool visible) { m_header->setVisible(visible); }
-
 void ChatPage::clear() {
     m_conv      = {};
     m_loaded    = false;
@@ -175,7 +174,6 @@ void ChatPage::clear() {
     m_composer->setEnabled(false);
     m_composer->setPlaceholder({});
 }
-
 void ChatPage::requestHistory(int beforeId) {
     if (m_loading) return;
     m_loading = true;
@@ -203,7 +201,8 @@ void ChatPage::appendIncoming(const chat_proto::Envelope &envelope) {
     fillFile(msg, envelope.is_file(), QString::fromStdString(envelope.file_id()).toInt(),
              envelope.file_name(), envelope.file_size());
     msg.isSelf     = (envelope.sender_uid() == m_selfUid);
-    msg.replyToId = envelope.reply_to().message_id();
+    msg.replyToId = envelope.reply_to().message_id() > 0
+                        ? envelope.reply_to().message_id() : envelope.reply_to_message_id();
     msg.replyToSenderName = QString::fromStdString(envelope.reply_to().sender_name());
     msg.replyToContent = QString::fromStdString(envelope.reply_to().content());
 
@@ -236,8 +235,9 @@ void ChatPage::handleEnvelope(const chat_proto::Envelope &envelope) {
             msg.timestamp  = QString::fromStdString(item.timestamp());
             fillFile(msg, item.is_file(), item.file_id(), item.file_name(), item.file_size());
             msg.isSelf     = (item.sender_uid() == m_selfUid);
-            if (item.reply_to().message_id() > 0) {
-                msg.replyToId         = item.reply_to().message_id();
+            if (item.reply_to().message_id() > 0 || item.reply_to_message_id() > 0) {
+                msg.replyToId         = item.reply_to().message_id() > 0
+                    ? item.reply_to().message_id() : item.reply_to_message_id();
                 msg.replyToSenderName = QString::fromStdString(item.reply_to().sender_name());
                 msg.replyToContent    = QString::fromStdString(item.reply_to().content());
             }
@@ -302,7 +302,6 @@ bool ChatPage::handleSystemText(const QString &text) {
         removeMessage(m_pendingIds.takeFirst());
     return false;
 }
-
 void ChatPage::confirmPending(int realId) {
     m_messageIds.insert(realId);
     if (m_pendingIds.isEmpty()) return;
@@ -347,7 +346,7 @@ void ChatPage::showMessageMenu(MessageRow *row, const QPoint &globalPos) {
         QGuiApplication::clipboard()->setText(msg.isFile ? msg.fileName : msg.content);
     } else if (chosen == replyAction) {
         m_replyTo = msg;
-        m_composer->setReplyTarget(msg.senderName, msg.content);
+        m_composer->setReplyTarget(msg.senderName, MessageRow::replyPreview(msg));
     } else if (chosen == recallAction) {
         chat_proto::Envelope env;
         env.set_type("delete_message");
@@ -373,6 +372,10 @@ void ChatPage::appendMessages(const QList<Message> &msgs, bool prepend) {
         for (const Message &msg : msgs)
             m_msgLayout->insertWidget(m_msgLayout->count() - 1, buildMessageWidget(msg));
     }
+    for (auto *row : std::as_const(m_rows)) {
+        if (auto *source = m_rows.value(row->message().replyToId))
+            row->setReplySource(source->message(), m_avatars->path(source->message().senderUid));
+    }
 }
 
 // 一条消息一个 MessageRow（长什么样在 MessageRow.cpp）；这里只登记它并接上右键菜单
@@ -381,6 +384,18 @@ MessageRow *ChatPage::buildMessageWidget(const Message &msg) {
     scheduleMedia();
     row->setAvatar(m_avatars->path(msg.senderUid));   // 本地没有这个人的头像时是默认图
     m_rows.insert(msg.messageId, row);
+    connect(row, &MessageRow::replyActivated, this, [this](int id) {
+        QPointer<MessageRow> source = m_rows.value(id);
+        if (!source) { m_client->statusMessage(tr("原消息不在当前视图，请加载更早的历史消息")); return; }
+        m_scroll->verticalScrollBar()->setValue(source->mapTo(m_msgContainer, QPoint()).y()
+            + source->height() / 2 - m_scroll->viewport()->height() / 2);
+        source->setObjectName("messageRowFlash");
+        source->style()->unpolish(source); source->style()->polish(source);
+        QTimer::singleShot(1400, source, [source] {
+            source->setObjectName("messageRow");
+            source->style()->unpolish(source); source->style()->polish(source);
+        });
+    });
     if (msg.isOptimistic) m_pendingIds.append(msg.messageId);
     // 排队连接 + QPointer：菜单开着的时候这一行可能被撤回删掉，不能在它自己的事件处理里弹菜单
     const QPointer<MessageRow> guard(row);
