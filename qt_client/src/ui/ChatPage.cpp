@@ -31,8 +31,8 @@ static void fillFile(Message &msg, bool isFile, int fileId, const std::string &n
     msg.fileSize = size;
 }
 
-ChatPage::ChatPage(ChatClient *client, AvatarStore *avatars, QWidget *parent)
-    : QWidget(parent), m_client(client), m_avatars(avatars)
+ChatPage::ChatPage(ChatClient *client, AvatarStore *avatars, MediaStore *media, QWidget *parent)
+    : QWidget(parent), m_client(client), m_avatars(avatars), m_media(media)
 {
     // 某个人的头像下好了 / 换了：把他已经显示出来的消息行的头像换掉
     connect(m_avatars, &AvatarStore::avatarChanged, this, [this](int uid) {
@@ -104,6 +104,13 @@ ChatPage::ChatPage(ChatClient *client, AvatarStore *avatars, QWidget *parent)
         m_client->send(env);
     });
     connect(m_composer, &Composer::replyCancelled, this, [this] { m_replyTo = {}; });
+
+    m_mediaTimer = new QTimer(this);
+    m_mediaTimer->setSingleShot(true);
+    m_mediaTimer->setInterval(80);
+    connect(m_mediaTimer, &QTimer::timeout, this, &ChatPage::updateVisibleMedia);
+    connect(m_scroll->verticalScrollBar(), &QScrollBar::valueChanged, this, &ChatPage::scheduleMedia);
+    connect(m_scroll->verticalScrollBar(), &QScrollBar::rangeChanged, this, &ChatPage::scheduleMedia);
 
     // 滚动到顶部时加载更早的历史
     connect(m_scroll->verticalScrollBar(), &QScrollBar::valueChanged, this, [this](int value) {
@@ -365,7 +372,8 @@ void ChatPage::appendMessages(const QList<Message> &msgs, bool prepend) {
 
 // 一条消息一个 MessageRow（长什么样在 MessageRow.cpp）；这里只登记它并接上右键菜单
 MessageRow *ChatPage::buildMessageWidget(const Message &msg) {
-    auto *row = new MessageRow(msg, m_msgContainer);
+    auto *row = new MessageRow(msg, m_media, m_msgContainer);
+    scheduleMedia();
     row->setAvatar(m_avatars->path(msg.senderUid));   // 本地没有这个人的头像时是默认图
     m_rows.insert(msg.messageId, row);
     if (msg.isOptimistic) m_pendingIds.append(msg.messageId);

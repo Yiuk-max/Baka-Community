@@ -27,6 +27,7 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
     m_sound = new SoundPlayer(this);
     m_avatars = new AvatarStore(new FileDownloader(m_client, this), this);
     connect(m_avatars, &AvatarStore::avatarChanged, this, &MainWindow::refreshAvatar);
+    initializeAttachments();
 
     // 主界面横向分三块：左侧工具栏 | 左侧通讯录 | 中间页面，水平布局
     auto *central = new QWidget(this);
@@ -43,15 +44,15 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
     // 中间区域：主页和聊天页叠在一起，同一时刻只显示一个
     m_center = new QStackedWidget(central);
     m_homePage = new HomePage(m_center);
-    m_chatPage = new ChatPage(m_client, m_avatars, m_center);
-    m_communityPage = new CommunityPage(m_client, m_avatars, m_center);
+    m_chatPage = new ChatPage(m_client, m_avatars, m_media, m_center);
+    m_communityPage = new CommunityPage(m_client, m_avatars, m_media, m_center);
     m_center->addWidget(m_homePage);
     m_center->addWidget(m_chatPage);
     m_center->addWidget(m_communityPage);
     m_contactPanel->setCommunitySidebar(m_communityPage->sidebar());
     layout->addWidget(m_center, 1);   // 伸展因子1，剩余宽度全给中间
 
-    setCentralWidget(central);
+    setCentralWidget(wrapAttachments(central));
 
     // 双击 logo 播放音效，可以在设置 - Baka 里关掉
     connect(m_toolRail, &ToolRail::logoDoubleClicked, this, [this] {
@@ -156,20 +157,6 @@ MainWindow::MainWindow(ChatClient *client, QWidget *parent)
 
     // ChatClient 没消化的业务消息都从这里出来，后面按 type 分给各页面
     connect(m_client, &ChatClient::envelopeReceived, this, &MainWindow::handleEnvelope);
-}
-
-void MainWindow::openChat(const Contact &contact) {
-    m_contactPanel->showCommunitySidebar(false);
-    m_toolRail->setActiveCommunity(0);
-    m_chatPage->openConversation(contact, m_client->uid());
-    m_center->setCurrentWidget(m_chatPage);
-}
-
-void MainWindow::showHome() {
-    m_contactPanel->showCommunitySidebar(false);
-    m_toolRail->setActiveCommunity(0);
-    m_contactPanel->clearSelection();
-    m_center->setCurrentWidget(m_homePage);
 }
 
 void MainWindow::request(const char *type) {

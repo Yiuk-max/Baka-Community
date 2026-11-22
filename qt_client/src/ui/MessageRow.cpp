@@ -2,7 +2,7 @@
 
 #include "Assets.h"
 #include "Avatar.h"
-#include "FileCover.h"
+#include "AttachmentWidget.h"
 #include "util/TimeFormat.h"
 
 #include <QContextMenuEvent>
@@ -14,7 +14,8 @@
 #include <QStyle>
 #include <QVBoxLayout>
 
-MessageRow::MessageRow(const Message &msg, QWidget *parent) : QWidget(parent), m_msg(msg) {
+MessageRow::MessageRow(const Message &msg, MediaStore *media, QWidget *parent)
+    : QWidget(parent), m_media(media), m_msg(msg) {
     setObjectName("messageRow");
     setAttribute(Qt::WA_StyledBackground);   // QWidget 子类默认不画 QSS 背景（悬停变色要用）
     auto *layout = new QHBoxLayout(this);
@@ -73,73 +74,14 @@ MessageRow::MessageRow(const Message &msg, QWidget *parent) : QWidget(parent), m
     layout->addLayout(cLayout, 1);
 }
 
-// 附件长什么样全在 FileCover 里；这里只负责摆放。下载 / 预览还没接，所以图片显示的是默认背景图
+// 封面、下载 / 预览和右侧体积标签在 AttachmentWidget 中，消息行只负责摆放。
 QWidget *MessageRow::buildAttachment() {
-    const QString sizeText = filecover::formatSize(m_msg.fileSize);
-    const bool image = filecover::isImage(m_msg.fileName);
-
-    if (image || filecover::isVideo(m_msg.fileName)) {
-        auto *box = new QWidget(this);
-        auto *boxLayout = new QVBoxLayout(box);
-        boxLayout->setContentsMargins(0, 4, 0, 0);
-        boxLayout->setSpacing(4);
-        const QSize size(300, 170);
-        auto *picture = new QLabel(box);
-        picture->setPixmap(image ? filecover::imagePlaceholder(size) : filecover::videoCover(size));
-        // 图和下载按钮放进同一个格子：按钮靠右下角，叠在图上面
-        auto *stack = new QGridLayout;
-        stack->setContentsMargins(0, 0, 0, 0);
-        stack->addWidget(picture, 0, 0);
-        auto *mediaDownload = makeDownloadButton(box, "messageMediaDownload");
-        auto *corner = new QVBoxLayout;
-        corner->setContentsMargins(0, 0, 8, 8);
-        corner->addWidget(mediaDownload);
-        stack->addLayout(corner, 0, 0, Qt::AlignRight | Qt::AlignBottom);
-        boxLayout->addLayout(stack);
-        auto *caption = new QLabel(m_msg.fileName + QStringLiteral(" · ") + sizeText, box);
-        caption->setObjectName("messageFileSize");
-        caption->setTextFormat(Qt::PlainText);
-        boxLayout->addWidget(caption);
-        return box;
-    }
-
-    // 普通文件：封面 + 文件名 + 大小 的卡片
-    auto *card = new QFrame(this);
-    card->setObjectName("messageFile");
-    card->setFixedWidth(360);
-    auto *cardLayout = new QHBoxLayout(card);
-    cardLayout->setContentsMargins(16, 12, 16, 12);
-    cardLayout->setSpacing(12);
-    auto *coverLabel = new QLabel(card);
-    coverLabel->setPixmap(filecover::cover(m_msg.fileName, 40));
-    cardLayout->addWidget(coverLabel);
-    auto *body = new QVBoxLayout;
-    body->setSpacing(2);
-    auto *nameLabel = new QLabel(m_msg.fileName, card);
-    nameLabel->setObjectName("messageFileName");
-    nameLabel->setTextFormat(Qt::PlainText);
-    nameLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);   // 太长就截断
-    nameLabel->setToolTip(m_msg.fileName);
-    auto *sizeLabel = new QLabel(sizeText, card);
-    sizeLabel->setObjectName("messageFileSize");
-    body->addWidget(nameLabel);
-    body->addWidget(sizeLabel);
-    cardLayout->addLayout(body, 1);
-    cardLayout->addWidget(makeDownloadButton(card, "messageFileDownload"));
-    return card;
+    m_attachment = new AttachmentWidget(m_msg, m_media, this);
+    return m_attachment;
 }
 
-// 下载按钮：文件下载协议还没接，目前只是占位，点了没有动作
-QToolButton *MessageRow::makeDownloadButton(QWidget *parent, const char *objectName) {
-    auto *button = new QToolButton(parent);
-    button->setObjectName(objectName);
-    button->setIcon(QIcon(assets::downloadIcon()));
-    button->setIconSize(QSize(20, 20));
-    button->setFixedSize(28, 28);
-    button->setCursor(Qt::PointingHandCursor);
-    button->setFocusPolicy(Qt::NoFocus);
-    button->setToolTip(tr("下载（还没做）"));
-    return button;
+void MessageRow::setAttachmentNearViewport(bool near) {
+    if (m_attachment) m_attachment->setNearViewport(near);
 }
 
 void MessageRow::confirm(int realId) {

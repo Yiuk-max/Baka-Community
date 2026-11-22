@@ -20,7 +20,7 @@
 
 #include <utility>
 
-CommunityPage::CommunityPage(ChatClient *client, AvatarStore *avatars, QWidget *parent)
+CommunityPage::CommunityPage(ChatClient *client, AvatarStore *avatars, MediaStore *media, QWidget *parent)
     : QWidget(parent), m_client(client), m_avatars(avatars) {
     setObjectName("communityPage");
     setAttribute(Qt::WA_StyledBackground);
@@ -59,7 +59,7 @@ CommunityPage::CommunityPage(ChatClient *client, AvatarStore *avatars, QWidget *
     m_content = new QStackedWidget(this);
     m_guidePage = new CommunityGuidePage;
     m_content->addWidget(m_guidePage);
-    m_chat = new ChatPage(m_client, m_avatars, this);
+    m_chat = new ChatPage(m_client, m_avatars, media, this);
     m_content->addWidget(m_chat);
     m_chat->setHeaderVisible(false);
     main->addWidget(m_content, 1);

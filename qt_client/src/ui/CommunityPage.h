@@ -11,6 +11,7 @@ namespace chat_proto { class Envelope; }
 class AvatarStore;
 class ChatClient;
 class ChatPage;
+class MediaStore;
 class CommunityChannelList;
 class CommunityGuidePage;
 class CommunityMembersPanel;
@@ -21,7 +22,7 @@ class QStackedWidget;
 class CommunityPage : public QWidget {
     Q_OBJECT
 public:
-    explicit CommunityPage(ChatClient *client, AvatarStore *avatars, QWidget *parent = nullptr);
+    explicit CommunityPage(ChatClient *client, AvatarStore *avatars, MediaStore *media, QWidget *parent = nullptr);
 
     QWidget *sidebar() const { return m_sidebar; }
     QList<Channel> channels() const { return m_channels; }

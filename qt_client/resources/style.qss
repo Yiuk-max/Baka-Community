@@ -982,3 +982,18 @@ QMenu#appMenu::separator {
     border: 1px solid #29292d;
     border-radius: 6px;
 }
+
+/* 聊天附件与全局下载进度卡（布局在 C++ 中） */
+#attachmentWidget { background: #202126; border: 1px solid #34363e; border-radius: 8px; }
+#transferScroll, #transferBody { background: transparent; border: none; }
+#transferCard { background: #1e1f24; border: 1px solid #383a43; border-radius: 8px; color: #dcdee3; }
+#transferCard[status="done"] { border-color: #3a5c4b; }
+#transferCard[status="failed"] { border-color: #5c3535; }
+#transferIcon { color: #66b7dd; font-size: 22px; font-weight: bold; }
+#transferDetail { color: #92949e; font-size: 11px; }
+#transferClose { background: transparent; border: none; color: #a5a7ae; font-size: 18px; }
+#transferClose:hover { background: #35363e; color: white; }
+#transferBar { background: #383a43; border: none; border-radius: 2px; }
+#transferBar::chunk { background: #45a8d5; border-radius: 2px; }
+#transferBar[status="done"]::chunk { background: #43b581; }
+#transferBar[status="failed"]::chunk { background: #ed4245; }

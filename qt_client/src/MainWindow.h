@@ -18,6 +18,8 @@ class HomePage;
 class QLabel;
 class QStackedWidget;
 class SoundPlayer;
+class MediaStore;
+class TransferProgressPanel;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -53,6 +55,8 @@ private:
     bool handleJoinRequestList(const QString &text);            // 上面两个请求的文本回复；是的话返回 true
     void handleJoinDecision(const JoinRequest &request, bool accept);   // “待定”页点了 接受 / 拒绝
     void wireCommunityAssets();
+    void initializeAttachments();
+    QWidget *wrapAttachments(QWidget *content);
     void refreshCommunityAssets();
     QCache<int, QPixmap> m_communityImages{24576}; // 图片缓存上限约 24 MiB（cost 按 KiB）
     QSet<int> m_communityImageRequests;
@@ -62,6 +66,8 @@ private:
     QList<Community> m_communities;
 
     ChatClient   *m_client       = nullptr;
+    MediaStore *m_media = nullptr;
+    TransferProgressPanel *m_transfers = nullptr;
     AvatarStore  *m_avatars      = nullptr;   // 用户头像的本地存储（本地没有或过期时自动下载）
     SoundPlayer  *m_sound        = nullptr;
     ToolRail     *m_toolRail     = nullptr;

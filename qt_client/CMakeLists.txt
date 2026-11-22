@@ -21,7 +21,7 @@ set(CMAKE_AUTORCC ON)
 # ---------------------------------------------------------------------------
 # WebSockets（QWebSocket）、Multimedia（提示音）不在 Qt 默认安装里，缺了用维护工具补装
 # Sql（QSqlDatabase）是 Qt 默认安装自带的，SQLite 驱动是插件 plugins/sqldrivers/qsqlite.dll，不用另装 sqlite
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Network Multimedia WebSockets Sql)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Network Multimedia WebSockets Sql Concurrent)
 
 qt_standard_project_setup()
 
@@ -57,6 +57,7 @@ set(APP_SOURCES
     src/MainWindowRequests.cpp
     src/MainWindowCommunitySettings.cpp
     src/MainWindowCommunityAssets.cpp
+    src/MainWindowAttachments.cpp
     src/AppConfig.h
     src/AppConfig.cpp
     src/ui/LoginPage.h
@@ -86,6 +87,7 @@ set(APP_SOURCES
     src/ui/BakaSettingsPage.cpp
     src/model/Contact.h
     src/model/Message.h
+    src/model/DownloadTask.h
     src/util/TimeFormat.h
     src/ui/ToolRail.h
     src/ui/ToolRail.cpp
@@ -93,6 +95,11 @@ set(APP_SOURCES
     src/ui/SoundPlayer.cpp
     src/ui/ChatPage.h
     src/ui/ChatPage.cpp
+    src/ui/ChatPageMedia.cpp
+    src/ui/AttachmentWidget.h
+    src/ui/AttachmentWidget.cpp
+    src/ui/TransferProgressPanel.h
+    src/ui/TransferProgressPanel.cpp
     src/ui/CommunityPage.h
     src/ui/CommunityPage.cpp
     src/ui/CommunityPageReplies.cpp
@@ -138,8 +145,17 @@ set(APP_SOURCES
     src/net/TlsSetup.cpp
     src/net/FileDownloader.h
     src/net/FileDownloader.cpp
+    src/net/FileDownloaderTasks.cpp
+    src/net/DownloadJournal.h
+    src/net/DownloadJournal.cpp
+    src/store/MediaStore.h
+    src/store/MediaStore.cpp
     src/store/AvatarStore.h
     src/store/AvatarStore.cpp
+    src/store/DownloadWriter.h
+    src/store/DownloadWriter.cpp
+    src/util/DownloadPaths.h
+    src/util/DownloadPaths.cpp
     ${PROTO_SRCS}
 )
 
@@ -192,7 +208,7 @@ target_include_directories(baka_client PRIVATE
 )
 
 target_link_libraries(baka_client PRIVATE
-    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Multimedia Qt6::WebSockets Qt6::Sql
+    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Multimedia Qt6::WebSockets Qt6::Sql Qt6::Concurrent
     ${Protobuf_LIBRARIES}
 )
 
@@ -200,21 +216,25 @@ if(WIN32)
     set_target_properties(baka_client PROPERTIES WIN32_EXECUTABLE ON)
 endif()
 
-option(BUILD_CLIENT_TESTS "Build offline community behavior tests" OFF)
-if(BUILD_CLIENT_TESTS)
+# 离线附件交互测试：独立开关，不恢复已删除的社区测试目标。
+option(BUILD_ATTACHMENT_TESTS "Build offline attachment behavior tests" OFF)
+if(BUILD_ATTACHMENT_TESTS)
     enable_testing()
-    set(TEST_SOURCES ${APP_SOURCES})
-    list(REMOVE_ITEM TEST_SOURCES src/main.cpp src/MainWindow.cpp src/MainWindowRequests.cpp src/MainWindowCommunitySettings.cpp src/MainWindowCommunityAssets.cpp)
-    qt_add_executable(community_behavior_tests tests/community_behavior.cpp ${TEST_SOURCES})
-    set_target_properties(community_behavior_tests PROPERTIES WIN32_EXECUTABLE OFF)
-    target_compile_definitions(community_behavior_tests PRIVATE
-        BAKA_TEST_STYLE="${CMAKE_CURRENT_SOURCE_DIR}/resources/style.qss")
-    target_include_directories(community_behavior_tests PRIVATE
+    set(ATTACHMENT_TEST_SOURCES ${APP_SOURCES})
+    list(REMOVE_ITEM ATTACHMENT_TEST_SOURCES src/main.cpp resources/app.rc)
+    qt_add_executable(attachment_behavior_tests tests/attachments_behavior.cpp ${ATTACHMENT_TEST_SOURCES})
+    set_target_properties(attachment_behavior_tests PROPERTIES WIN32_EXECUTABLE OFF)
+    target_include_directories(attachment_behavior_tests PRIVATE
         "${CMAKE_CURRENT_BINARY_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/src" ${Protobuf_INCLUDE_DIR})
-    target_link_libraries(community_behavior_tests PRIVATE
-        Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Multimedia Qt6::WebSockets Qt6::Sql ${Protobuf_LIBRARIES})
-    qt_add_resources(community_behavior_tests "testAssets" PREFIX "/" BASE resources FILES
-        resources/style.qss resources/images/default_avatar.png resources/images/default_comm_avatar.png
-        resources/images/default_background.png resources/icons/settings.png)
-    add_test(NAME community_behavior COMMAND community_behavior_tests -platform offscreen)
+    target_link_libraries(attachment_behavior_tests PRIVATE
+        Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Multimedia Qt6::WebSockets
+        Qt6::Sql Qt6::Concurrent ${Protobuf_LIBRARIES})
+    target_compile_definitions(attachment_behavior_tests PRIVATE
+        BAKA_TEST_STYLE="${CMAKE_CURRENT_SOURCE_DIR}/resources/style.qss"
+        BAKA_TEST_SCREENSHOT="${CMAKE_CURRENT_BINARY_DIR}/attachments-offline.png")
+    qt_add_resources(attachment_behavior_tests "attachmentTestAssets" PREFIX "/" BASE resources FILES
+        resources/images/default_avatar.png resources/images/default_group_avatar.png
+        resources/images/default_comm_avatar.png resources/images/default_background.png
+        resources/images/logo.png resources/icons/download.png resources/icons/settings.png)
+    add_test(NAME attachment_behavior COMMAND attachment_behavior_tests -platform offscreen)
 endif()

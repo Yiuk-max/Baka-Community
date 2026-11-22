@@ -12,6 +12,8 @@ namespace chat_proto { class Envelope; }
 class AvatarStore;
 class ChatClient;
 class Composer;
+class MediaStore;
+class QTimer;
 class MessageRow;
 class QLabel;
 class QScrollArea;
@@ -24,7 +26,7 @@ class ChatPage : public QWidget {
     Q_OBJECT
 public:
     // avatars：消息行的头像从它那里取本地文件，头像下好后跟着刷新
-    explicit ChatPage(ChatClient *client, AvatarStore *avatars, QWidget *parent = nullptr);
+    explicit ChatPage(ChatClient *client, AvatarStore *avatars, MediaStore *media, QWidget *parent = nullptr);
 
     // 切换到某个会话并立刻拉取首页历史
     void openConversation(const Contact &contact, int selfUid);
@@ -37,7 +39,13 @@ public:
     // system 文本里和聊天有关的（发送确认 / 撤回成功 / 发送失败）。返回 true 表示已处理完，不用再提示
     bool handleSystemText(const QString &text);
 
+protected:
+    void showEvent(QShowEvent *event) override;
+    void hideEvent(QHideEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
 private:
+    void scheduleMedia();
+    void updateVisibleMedia();
     void requestHistory(int beforeId = 0);
     void appendMessages(const QList<Message> &msgs, bool prepend = false);
     void appendIncoming(const chat_proto::Envelope &envelope);   // 一条实时推送（私聊 / 群聊 / 频道）
@@ -50,6 +58,8 @@ private:
 
     ChatClient  *m_client       = nullptr;
     AvatarStore *m_avatars      = nullptr;
+    MediaStore *m_media = nullptr;
+    QTimer *m_mediaTimer = nullptr;
     int          m_selfUid      = 0;
     Contact      m_conv;
     bool         m_loaded       = false;

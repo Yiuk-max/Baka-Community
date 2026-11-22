@@ -7,12 +7,14 @@
 #include <QWidget>
 
 class QLabel;
-class QToolButton;
+class AttachmentWidget;
+class MediaStore;
 
 class MessageRow : public QWidget {
     Q_OBJECT
 public:
-    explicit MessageRow(const Message &msg, QWidget *parent = nullptr);
+    explicit MessageRow(const Message &msg, MediaStore *media, QWidget *parent = nullptr);
+    void setAttachmentNearViewport(bool near);
 
     const Message &message() const { return m_msg; }
     // 乐观消息得到服务端确认：换成真实 id，正文从灰色变成正常颜色
@@ -27,8 +29,9 @@ protected:
     void contextMenuEvent(QContextMenuEvent *event) override;
 
 private:
-    QWidget *buildAttachment();     // 文件消息：图片占位 / 视频封面 / 文件卡片
-    QToolButton *makeDownloadButton(QWidget *parent, const char *objectName);   // 下载按钮（目前占位）
+    QWidget *buildAttachment();     // 附件展示与交互交给独立控件
+    MediaStore *m_media = nullptr;
+    AttachmentWidget *m_attachment = nullptr;
 
     Message m_msg;
     QLabel *m_avatar = nullptr;
