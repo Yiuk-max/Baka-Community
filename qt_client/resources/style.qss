@@ -49,6 +49,12 @@ QStatusBar::item {
     border: 0;
     border-radius: 16px;
 }
+#railCommunityButton:checked {
+    border: 2px solid #f2f3f5;
+}
+#railLogoButton:checked {
+    background: #5865f2;
+}
 /*通讯录：搜索框*/
 #contactSearch {
     background: #17171a;
@@ -176,9 +182,42 @@ QStatusBar::item {
 }
 /*设置页面里的一行*/
 #settingsRow {
-    background: #202024;
+    background: #26262b;
+    border: 1px solid #35353c;
+    border-radius: 8px;
+}
+/*裁剪头像窗口的卡片*/
+#cropCard {
+    background: #222225;
     border: 1px solid #29292d;
     border-radius: 8px;
+}
+/*裁剪窗口：1:1 预览框（图片自己画上去，这里只给底色）*/
+#cropView {
+    background: #17171a;
+    border: 1px solid #29292d;
+    border-radius: 4px;
+}
+/*裁剪窗口的提示文字*/
+#cropHint {
+    color: #949ba4;
+    font-size: 12px;
+}
+/*裁剪窗口的缩放滑块：和音量滑块同一套外观*/
+#zoomSlider::groove:horizontal {
+    height: 4px;
+    background: #3a3a40;
+    border-radius: 2px;
+}
+#zoomSlider::sub-page:horizontal {
+    background: #5865f2;
+    border-radius: 2px;
+}
+#zoomSlider::handle:horizontal {
+    width: 14px;
+    margin: -5px 0;
+    border-radius: 7px;
+    background: #ffffff;
 }
 /*一行里的次要文字（项目名、说明）*/
 #settingsRowName {
@@ -304,6 +343,11 @@ Spinner {
     color: #949ba4;
     font-size: 13px;
 }
+/*邮箱验证页的提示文字*/
+#verifyHint {
+    color: #b5bac1;
+    font-size: 13px;
+}
 /*标签*/
 #fieldLabel {
     color: #b5bac1;
@@ -353,3 +397,624 @@ Spinner {
     color: #f2f3f5;
     text-decoration: underline;
 }
+
+/* ---- 聊天页 ---- */
+/*中间聊天页背景*/
+#chatPage {
+    background: #1a1a1e;
+}
+/*顶部会话标题栏*/
+#chatHeader {
+    background: #1a1a1e;
+    border-bottom: 1px solid #252529;
+    color: #f2f3f5;
+    font-size: 15px;
+    font-weight: 600;
+    padding: 0 16px;
+    min-height: 48px;
+    max-height: 48px;
+}
+/*消息滚动区*/
+#chatScroll, #msgContainer {
+    background: #1a1a1e;
+    border: 0;
+}
+#chatScroll QScrollBar:vertical {
+    background: transparent;
+    width: 6px;
+}
+#chatScroll QScrollBar::handle:vertical {
+    background: #3a3a40;
+    border-radius: 3px;
+    min-height: 24px;
+}
+#chatScroll QScrollBar::add-line:vertical, #chatScroll QScrollBar::sub-line:vertical,
+#chatScroll QScrollBar::add-page:vertical, #chatScroll QScrollBar::sub-page:vertical {
+    background: transparent;
+    height: 0;
+}
+/*消息行*/
+#messageRow {
+    background: transparent;
+}
+#messageRow:hover {
+    background: #1f1f23;
+}
+/*发送者名字*/
+#msgName {
+    color: #f2f3f5;
+    font-weight: 600;
+    font-size: 14px;
+}
+#msgSelfName {
+    color: #7289da;
+    font-weight: 600;
+    font-size: 14px;
+}
+/*时间戳*/
+#msgTime {
+    color: #72767d;
+    font-size: 11px;
+}
+/*消息正文*/
+#msgText {
+    color: #dcddde;
+    font-size: 14px;
+}
+/*乐观消息（待确认）：稍微变淡*/
+#msgTextPending {
+    color: #72767d;
+    font-size: 14px;
+}
+/*回复引用块*/
+#msgQuote {
+    background: transparent;
+    border: 0;
+    color: #b5bac1;
+    font-size: 13px;
+}
+#msgReplyLabel {
+    background: transparent;
+    color: #8b8d96;
+    font-size: 12px;
+    font-weight: 600;
+}
+#msgReplyName {
+    background: transparent;
+    color: #b5bac1;
+    font-weight: 500;
+}
+#msgReplyText {
+    background: transparent;
+    color: #b5bac1;
+}
+#msgQuote:hover #msgReplyText {
+    text-decoration: underline;
+}
+#messageRowFlash {
+    background: #2b2d33;
+}
+/*底部输入框外层（只留边距，底色和聊天页一样）*/
+#composerOuter {
+    background: #1a1a1e;
+}
+/*圆角盒子（web 端 .composer）*/
+#composerInner {
+    background: #202126;
+    border-radius: 8px;
+}
+/*输入框本体（嵌在圆角盒子里，自己透明、无边框）*/
+#composerInput {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    color: #f2f3f5;
+    font-size: 15px;
+    placeholder-text-color: #80848e;
+    selection-background-color: #5a65ea;
+}
+#composerInput:disabled {
+    color: #80848e;
+}
+/*工具按钮（＋ 和表情）：都是 Unicode 字符，悬停时变亮，不加底色*/
+#composerToolBtn {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    color: #b5bac1;
+    font-size: 20px;
+}
+#composerToolBtn:hover {
+    color: #f2f3f5;
+}
+#composerToolBtn:disabled {
+    color: #4f545c;
+}
+
+/* ---- 表情面板（web 端 App.vue 里的 .emoji-panel） ---- */
+#emojiPanel {
+    background: #2b2d31;
+    border: 1px solid #1e1f22;
+    border-radius: 8px;
+}
+/*分类标签行：下面一条分隔线*/
+#emojiTabRow {
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid #1e1f22;
+}
+#emojiTab {
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    padding: 0;
+    font-family: "Segoe UI Emoji";
+    font-size: 18px;
+}
+#emojiTab:hover {
+    background: #35373c;
+}
+/*当前分类：主题色底*/
+#emojiTab:checked {
+    background: #5865f2;
+}
+/*表情滚动区和里面的网格都透明，透出面板底色*/
+#emojiScroll, #emojiGrid {
+    background: transparent;
+    border: 0;
+}
+#emojiScroll QScrollBar:vertical {
+    background: #1b1c20;
+    width: 12px;
+    margin: 0;
+}
+#emojiScroll QScrollBar::handle:vertical {
+    background: #606168;
+    border: 2px solid #1b1c20;
+    border-radius: 6px;
+    min-height: 56px;
+}
+#emojiScroll QScrollBar::handle:vertical:hover {
+    background: #73757e;
+}
+#emojiScroll QScrollBar::add-line:vertical, #emojiScroll QScrollBar::sub-line:vertical,
+#emojiScroll QScrollBar::add-page:vertical, #emojiScroll QScrollBar::sub-page:vertical {
+    background: transparent;
+    height: 0;
+}
+#emojiButton {
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    padding: 0;
+    font-family: "Segoe UI Emoji";
+    font-size: 24px;
+}
+#emojiButton:hover {
+    background: #35373c;
+}
+
+/* ---- 主页（好友页，web 端 .friends-main） ---- */
+#homePage, #homeScroll, #homeContainer {
+    background: #1a1a1e;
+    border: 0;
+}
+/*顶部标题栏：下面一条分隔线*/
+#homeHeader {
+    background: #1a1a1e;
+    border: 0;
+    border-bottom: 1px solid #252529;
+}
+#homeTitle {
+    color: #f2f3f5;
+    font-size: 16px;
+    font-weight: 700;
+}
+/*标题和标签之间的竖线*/
+#homeHeaderDivider {
+    background: #252529;
+    border: 0;
+}
+/*全部 / 待定*/
+#homeTab {
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    padding: 0 10px;
+    color: #b5bac1;
+    font-size: 15px;
+    font-weight: 500;
+}
+#homeTab:hover, #homeTab:checked {
+    background: #2c2c30;
+    color: #f2f3f5;
+}
+/*搜索好友*/
+#homeSearch {
+    background: #17171a;
+    border: 1px solid #232326;
+    border-radius: 8px;
+    padding: 0 12px;
+    color: #f2f3f5;
+    font-size: 15px;
+    selection-background-color: #5a65ea;
+}
+#homeSearch:focus {
+    border: 1px solid #5a65ea;
+}
+/*“全部 — N”*/
+#homeHeading {
+    color: #f2f3f5;
+    font-size: 16px;
+    font-weight: 700;
+}
+/*“群聊”“社区”小节标题和下面的说明*/
+#homeSubHeading {
+    color: #f2f3f5;
+    font-size: 14px;
+    font-weight: 700;
+}
+#homeHint, #homeEmpty {
+    color: #949ba4;
+    font-size: 12.5px;
+}
+/*“＋ 新建群聊”*/
+#homeLinkButton {
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    padding: 0 12px;
+    color: #b5bac1;
+    font-size: 13.5px;
+}
+#homeLinkButton:hover {
+    background: #2c2c30;
+    color: #f2f3f5;
+}
+/*好友 / 群聊 / 社区的一行（整行是按钮）*/
+#homeRow {
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+}
+#homeRow:hover {
+    background: #222225;
+}
+#homeRowName {
+    background: transparent;
+    color: #f2f3f5;
+    font-size: 15px;
+    font-weight: 600;
+}
+#homeRowArrow {
+    background: transparent;
+    color: #949ba4;
+    font-size: 16px;
+}
+#homeScroll QScrollBar:vertical {
+    background: transparent;
+    width: 6px;
+}
+#homeScroll QScrollBar::handle:vertical {
+    background: #3a3a40;
+    border-radius: 3px;
+    min-height: 24px;
+}
+#homeScroll QScrollBar::add-line:vertical, #homeScroll QScrollBar::sub-line:vertical,
+#homeScroll QScrollBar::add-page:vertical, #homeScroll QScrollBar::sub-page:vertical {
+    background: transparent;
+    height: 0;
+}
+
+/* ---- 弹出菜单（消息右键 / 社区右键 / 工具栏“＋”，web 端 .community-context-menu） ---- */
+QMenu#appMenu {
+    background: #1b1c20;
+    border: 1px solid #2c2c31;
+    border-radius: 10px;
+    padding: 8px;
+}
+QMenu#appMenu::item {
+    background: transparent;
+    border-radius: 5px;
+    padding: 8px 28px 8px 10px;
+    color: #b5bac1;
+    font-size: 13.5px;
+}
+QMenu#appMenu::item:selected {
+    background: #5a65ea;
+    color: #ffffff;
+}
+QMenu#appMenu::item:disabled {
+    background: transparent;
+    color: #4f545c;
+}
+QMenu#appMenu::separator {
+    height: 1px;
+    margin: 6px 4px;
+    background: #2c2c31;
+}
+/*工具栏：社区图标下面的“＋”按钮（圆形）*/
+#railAddButton {
+    background: #222225;
+    border: 0;
+    border-radius: 24px;
+    color: #b5bac1;
+    font-size: 22px;
+}
+#railAddButton:hover {
+    background: #5865f2;
+    color: #ffffff;
+}
+/*输入框上方的“正在回复 @某人”提示条*/
+#composerReply {
+    background: #292a30;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+}
+#composerReplyText {
+    background: transparent;
+    color: #b5bac1;
+    font-size: 13px;
+}
+#composerReplyCancel {
+    background: #4e5058;
+    border: 0;
+    border-radius: 9px;
+    padding: 0;
+    color: #e6e7ea;
+    font-size: 13px;
+}
+#composerReplyCancel:hover {
+    background: #5c5e66;
+}
+/*聊天里的文件卡片（web 端 .message-file）*/
+#messageFile {
+    background: #202126;
+    border: 1px solid #2b2b2f;
+    border-radius: 8px;
+}
+#messageFileName {
+    background: transparent;
+    color: #00a8fc;
+    font-size: 16px;
+}
+/*文件大小、图片 / 视频下面的说明*/
+#messageFileSize {
+    background: transparent;
+    color: #949ba4;
+    font-size: 12px;
+}
+/*文件卡片右边的下载按钮（web 端 .message-file-download）*/
+#messageFileDownload {
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    padding: 0;
+    color: #b5bac1;
+    font-size: 18px;
+}
+#messageFileDownload:hover {
+    background: #2b2b2f;
+    color: #f2f3f5;
+}
+/*图片 / 视频右下角的下载按钮：叠在图上，所以带半透明深色底*/
+#messageMediaDownload {
+    background: rgba(0, 0, 0, 0.6);
+    border: 0;
+    border-radius: 4px;
+    padding: 0;
+    color: #f2f3f5;
+    font-size: 18px;
+}
+#messageMediaDownload:hover {
+    background: rgba(0, 0, 0, 0.85);
+}
+/*邀请好友弹窗里的列表：透明，透出卡片底色*/
+#inviteScroll, #inviteList {
+    background: transparent;
+    border: 0;
+}
+
+/* ---- 社区页 ---- */
+/*整页底色：左边频道栏深一档，右边内容区正常*/
+#communityPage {
+    background: #1a1a1e;
+}
+#communitySidebar {
+    background: #121214;
+}
+/*频道栏顶部：社区头像 + 名称 + 小按钮*/
+#communitySidebarHeader {
+    background: #121214;
+    border-bottom: 1px solid #1e1e22;
+}
+#communitySidebarName {
+    color: #f2f3f5;
+    font-weight: 700;
+}
+#communitySidebarTitleButton {
+    background: transparent;
+    border: 0;
+    color: #f2f3f5;
+    font-weight: 700;
+    text-align: left;
+}
+#communityChatHeader {
+    background: #1a1a1e;
+    border-bottom: 1px solid #252529;
+}
+/*频道栏顶部的小圆按钮（＋ / 设置）*/
+#communityIconButton {
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    color: #b5bac1;
+}
+#communityIconButton:hover {
+    background: #2b2b2f;
+    color: #f2f3f5;
+}
+/*频道栏里的导航行（社区成员 / 服务器指南）*/
+#communityNavRow {
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    color: #949ba4;
+    text-align: left;
+    padding-left: 10px;
+}
+#communityNavRow:hover {
+    background: #222225;
+    color: #f2f3f5;
+}
+#communityNavRow:checked {
+    background: #2c2c30;
+    color: #f2f3f5;
+    font-weight: 600;
+}
+/*频道列表的滚动区和容器：透明，透出频道栏底色*/
+#communityChannelScroll, #communityChannelContainer {
+    background: transparent;
+    border: 0;
+}
+/*频道分组标题（分区名）*/
+#communityCategory {
+    color: #7f8590;
+    font-size: 11px;
+    font-weight: 700;
+    padding-left: 10px;
+    padding-top: 6px;
+}
+/*一行频道*/
+#communityChannelRow {
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    color: #949ba4;
+    text-align: left;
+    padding-left: 10px;
+}
+#communityChannelRow:hover {
+    background: #222225;
+    color: #f2f3f5;
+}
+#communityChannelRow:checked {
+    background: #2c2c30;
+    color: #ffffff;
+    font-weight: 600;
+}
+#communityChannelsEmpty {
+    color: #7f8590;
+    font-size: 12px;
+    padding-left: 10px;
+}
+/*服务器指南页*/
+#communityGuideScroll, #communitySettingsScroll {
+    background: transparent;
+    border: 0;
+}
+#communitySettingsContainer {
+    background: #1a1a1e;
+}
+#communityGuide {
+    background: #1a1a1e;
+}
+#communityGuideName {
+    color: #f2f3f5;
+    font-size: 28px;
+    font-weight: 800;
+}
+#communityGuideDesc {
+    color: #b5bac1;
+    font-size: 14px;
+}
+#communityGuideStats {
+    color: #949ba4;
+    font-size: 12px;
+}
+/*右侧成员面板*/
+#communityMembers {
+    background: #17171a;
+    border-left: 1px solid #252529;
+}
+#communityMembersHeader {
+    background: #17171a;
+    border-bottom: 1px solid #252529;
+}
+#communityMembersTitle {
+    color: #f2f3f5;
+    font-weight: 700;
+}
+#communityMembersCount {
+    color: #949ba4;
+    font-size: 12px;
+}
+#communityMembersScroll, #communityMembersContainer {
+    background: transparent;
+    border: 0;
+}
+#communityMembersGroup {
+    color: #7f8590;
+    font-size: 11px;
+    font-weight: 700;
+    padding-left: 4px;
+}
+#communityMemberRow {
+    background: transparent;
+    border-radius: 4px;
+}
+#communityMemberRow:hover {
+    background: #222225;
+}
+#communityMemberName {
+    color: #dcddde;
+}
+#communityMemberTag {
+    color: #949ba4;
+    font-size: 11px;
+}
+#communityMembersEmpty {
+    color: #7f8590;
+    font-size: 12px;
+}
+
+/* ---- 社区设置弹窗：重构后的补充样式 ---- */
+#communitySettingsDialog QScrollBar:vertical {
+    background: #17171a;
+    width: 8px;
+}
+#communitySettingsDialog QScrollBar::handle:vertical {
+    background: #3a3a40;
+    border-radius: 4px;
+    min-height: 24px;
+}
+#communitySettingsDialog QScrollBar::add-line:vertical,
+#communitySettingsDialog QScrollBar::sub-line:vertical {
+    height: 0;
+    background: transparent;
+}
+#communitySettingsDialog QScrollBar::add-page:vertical,
+#communitySettingsDialog QScrollBar::sub-page:vertical {
+    background: transparent;
+}
+/*背景图片预览框：圆角 + 深一档边框，避免和卡片底色糊在一起*/
+#settingsBannerPreview {
+    background: #17171a;
+    border: 1px solid #29292d;
+    border-radius: 6px;
+}
+
+/* 聊天附件与全局下载进度卡（布局在 C++ 中） */
+#attachmentWidget { background: #202126; border: 1px solid #34363e; border-radius: 8px; }
+#transferScroll, #transferBody { background: transparent; border: none; }
+#transferCard { background: #1e1f24; border: 1px solid #383a43; border-radius: 8px; color: #dcdee3; }
+#transferCard[status="done"] { border-color: #3a5c4b; }
+#transferCard[status="failed"] { border-color: #5c3535; }
+#transferIcon { color: #66b7dd; font-size: 22px; font-weight: bold; }
+#transferDetail { color: #92949e; font-size: 11px; }
+#transferClose { background: transparent; border: none; color: #a5a7ae; font-size: 18px; }
+#transferClose:hover { background: #35363e; color: white; }
+#transferBar { background: #383a43; border: none; border-radius: 2px; }
+#transferBar::chunk { background: #45a8d5; border-radius: 2px; }
+#transferBar[status="done"]::chunk { background: #43b581; }
+#transferBar[status="failed"]::chunk { background: #ed4245; }

@@ -2,12 +2,15 @@
 
 #include "Assets.h"
 #include "Avatar.h"
+#include "MenuStyle.h"
 
 #include <QEvent>
 #include <QFrame>
 #include <QIcon>
+#include <QPair>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QTimer>
 #include <QVBoxLayout>
 
 ToolRail::ToolRail(QWidget *parent) : QWidget(parent) {
@@ -48,11 +51,64 @@ ToolRail::ToolRail(QWidget *parent) : QWidget(parent) {
     m_communityLayout = new QVBoxLayout(communityList);
     m_communityLayout->setContentsMargins(0, 0, 0, 0);
     m_communityLayout->setSpacing(8);
+
+    // “＋”按钮：跟在最后一个社区图标下面（和 web 端一样），点开是创建 / 加入的菜单
+    m_addButton = new QPushButton(QStringLiteral("＋"));
+    m_addButton->setObjectName("railAddButton");
+    m_addButton->setFixedSize(48, 48);
+    m_addButton->setCursor(Qt::PointingHandCursor);
+    m_addButton->setToolTip(tr("创建或加入社区"));
+    m_communityLayout->addWidget(m_addButton, 0, Qt::AlignHCenter);
+
     m_communityLayout->addStretch();   // 图标插在弹簧上面，始终从顶部往下排
     scroll->setWidget(communityList);
     m_layout->addWidget(scroll, 1);
 
     connect(m_logoButton, &QPushButton::clicked, this, &ToolRail::homeClicked);
+    connect(m_addButton, &QPushButton::clicked, this, &ToolRail::showAddMenu);
+}
+
+void ToolRail::showAddMenu() {
+    QMenu menu(this);
+    menus::prepare(&menu);
+    const QList<QPair<QString, AddAction>> items = {
+        {tr("创建社区"), AddAction::CreateCommunity},
+        {tr("创建群聊"), AddAction::CreateGroup},
+        {tr("申请加入社区"), AddAction::JoinCommunity},
+        {tr("申请加入群聊"), AddAction::JoinGroup},
+        {tr("添加好友"), AddAction::AddFriend},
+    };
+    for (const auto &item : items) menu.addAction(item.first)->setData(static_cast<int>(item.second));
+
+    // 菜单出现在按钮右边
+    QAction *chosen = menu.exec(m_addButton->mapToGlobal(QPoint(m_addButton->width() + 10, 0)));
+    if (chosen) emit addActionTriggered(static_cast<AddAction>(chosen->data().toInt()));
+}
+
+// 社区右键菜单：和社区页里的入口一致
+void ToolRail::showCommunityMenu(const Community &community, const QPoint &globalPos) {
+    QMenu menu(this);
+    menus::prepare(&menu);
+    QAction *invite = menu.addAction(tr("邀请至社区"));
+    QAction *settings = menu.addAction(tr("社区设置"));
+    menu.addSeparator();
+    QAction *createChannel = menu.addAction(tr("创建频道"));
+    menu.addSeparator();
+    QAction *leave = menu.addAction(tr("离开社区"));
+
+    QAction *chosen = menu.exec(globalPos);
+    if (chosen == invite) emit communityActionTriggered(community, CommunityAction::Invite);
+    else if (chosen == createChannel) emit communityActionTriggered(community, CommunityAction::CreateChannel);
+    else if (chosen == settings) emit communityActionTriggered(community, CommunityAction::Settings);
+    else if (chosen == leave) emit communityActionTriggered(community, CommunityAction::Leave);
+}
+
+void ToolRail::setActiveCommunity(int id) {
+    m_activeCommunityId = id;
+    m_logoButton->setCheckable(true);
+    m_logoButton->setChecked(id == 0);
+    for (auto *button : m_communityButtons)
+        button->setChecked(button->property("communityId").toInt() == id);
 }
 
 void ToolRail::setCommunities(const QList<Community> &communities) {
@@ -64,6 +120,9 @@ void ToolRail::setCommunities(const QList<Community> &communities) {
     for (const Community &community : communities) {
         auto *button = new QPushButton;
         button->setObjectName("railCommunityButton");
+        button->setProperty("communityId", community.id);
+        button->setCheckable(true);
+        button->setChecked(community.id == m_activeCommunityId);
         button->setFixedSize(48, 48);
         button->setIcon(icon);
         button->setIconSize(QSize(48, 48));
@@ -71,10 +130,26 @@ void ToolRail::setCommunities(const QList<Community> &communities) {
         button->setToolTip(community.name);
         connect(button, &QPushButton::clicked, this,
                 [this, community] { emit communityClicked(community); });
+        // 右键：社区菜单
+        button->setContextMenuPolicy(Qt::CustomContextMenu);
+        connect(button, &QPushButton::customContextMenuRequested, this,
+                [this, community, button](const QPoint &pos) {
+            // 等这次右键事件处理完再弹菜单：菜单开着时列表可能刷新，这个按钮会被删掉
+            const QPoint globalPos = button->mapToGlobal(pos);
+            QTimer::singleShot(0, this, [this, community, globalPos] {
+                showCommunityMenu(community, globalPos);
+            });
+        });
 
-        // 插在末尾的弹簧之前
-        m_communityLayout->insertWidget(m_communityLayout->count() - 1, button, 0, Qt::AlignHCenter);
+        // 插在“＋”按钮和末尾的弹簧之前
+        m_communityLayout->insertWidget(m_communityLayout->count() - 2, button, 0, Qt::AlignHCenter);
         m_communityButtons.append(button);
+    }
+}
+
+void ToolRail::setCommunityAvatar(int id, const QPixmap &avatar) {
+    for (auto *button : m_communityButtons) {
+        if (button->property("communityId").toInt() == id) button->setIcon(QIcon(avatar));
     }
 }
 

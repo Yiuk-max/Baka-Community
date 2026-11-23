@@ -74,6 +74,8 @@ SettingsDialog::SettingsDialog(const QString &username, int uid, const QString &
             &SettingsDialog::nameChangeRequested);
     connect(m_accountPage, &AccountSettingsPage::emailChangeRequested, this,
             &SettingsDialog::emailChangeRequested);
+    connect(m_accountPage, &AccountSettingsPage::avatarUploadRequested, this,
+            &SettingsDialog::avatarUploadRequested);
 
     navLayout->addStretch();
     auto *logoutButton = new QPushButton(tr("登出"));
@@ -92,6 +94,14 @@ void SettingsDialog::setProfile(const QString &username, const QString &email) {
 
 void SettingsDialog::showProfileError(const QString &message) {
     m_accountPage->showError(message);
+}
+
+void SettingsDialog::setAvatar(const QString &path) { m_accountPage->setAvatar(path); }
+
+void SettingsDialog::avatarUploadDone() { m_accountPage->showAvatarDone(); }
+
+void SettingsDialog::showAvatarError(const QString &message) {
+    m_accountPage->showAvatarError(message);
 }
 
 // ---- 拖动：按钮、输入框会自己吃掉鼠标事件，所以只有按在空白处才会走到这里 ----

@@ -2,6 +2,7 @@
 
 // 设置窗口（对应 web 端 .settings-window）：左边是分类导航，右边是当前分类的页面。
 // 无系统标题栏，右上角 × 关闭；点“登出”时 exec() 返回 Logout，由调用方去退出登录。
+#include <QByteArray>
 #include <QDialog>
 #include <QPoint>
 
@@ -23,11 +24,16 @@ public:
     // 账户页的修改结果，由调用方（MainWindow）从 ChatClient 转过来
     void setProfile(const QString &username, const QString &email);
     void showProfileError(const QString &message);
+    void setAvatar(const QString &path);                    // 账户页的头像预览
+    void avatarUploadDone();                                // 头像上传 + set_avatar 成功
+    void showAvatarError(const QString &message);
 
 signals:
     // 账户页里点了“保存”，原样转给调用方
     void nameChangeRequested(const QString &name);
     void emailChangeRequested(const QString &email);
+    // 账户页选好并裁好了新头像（1:1 PNG）
+    void avatarUploadRequested(const QByteArray &png);
 
 protected:
     // 无边框窗口得自己处理拖动（和 LoginDialog 同一套做法）：按住空白处拖

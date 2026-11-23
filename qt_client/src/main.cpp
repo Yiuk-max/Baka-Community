@@ -46,11 +46,25 @@ int main(int argc, char *argv[]) {
     QObject::connect(&loginDialog, &LoginDialog::loginRequested, &client, &ChatClient::login);
     QObject::connect(&loginDialog, &LoginDialog::registerRequested, &client,
                      &ChatClient::registerAccount);
+    // 邮箱验证码：提交 / 重发
+    QObject::connect(&loginDialog, &LoginDialog::verifyCodeSubmitted, &client,
+                     &ChatClient::verifyEmail);
+    QObject::connect(&loginDialog, &LoginDialog::resendVerifyRequested, &client,
+                     &ChatClient::resendVerifyCode);
     QObject::connect(&client, &ChatClient::authStarted, &loginDialog,
                      [&loginDialog] { loginDialog.setBusy(true); });
     QObject::connect(&client, &ChatClient::authFailed, &loginDialog, &LoginDialog::showError);
     QObject::connect(&client, &ChatClient::registerSucceeded, &loginDialog,
                      &LoginDialog::showRegistered);
+    // 验证码回执：登录被拦住 → 切验证页；验证通过 → 回登录表单；重发成功 / 还在冷却 → 提示
+    QObject::connect(&client, &ChatClient::emailVerificationRequired, &loginDialog,
+                     &LoginDialog::showVerificationRequired);
+    QObject::connect(&client, &ChatClient::verifySucceeded, &loginDialog,
+                     &LoginDialog::showVerified);
+    QObject::connect(&client, &ChatClient::verifyCodeSent, &loginDialog,
+                     &LoginDialog::showVerifyCodeSent);
+    QObject::connect(&client, &ChatClient::verifyCooldown, &loginDialog,
+                     &LoginDialog::showVerifyCooldown);
     // 本地有 token 时会自动登录，成功后同样走这里直接关掉登录窗口
     QObject::connect(&client, &ChatClient::loginSucceeded, &loginDialog, &LoginDialog::accept);
 
@@ -64,7 +78,9 @@ int main(int argc, char *argv[]) {
                          &AutoLoginDialog::fallbackToLogin);
         // 根本没连上服务器时不会有 authFailed，要单独处理
         QObject::connect(&client, &ChatClient::disconnected, &autoLogin,
-                         [&loginDialog, &autoLogin](const QString &reason) {
+                         [&loginDialog, &autoLogin, &client](const QString &reason) {
+            // 退回手动登录：停掉后台 token 自动登录，避免它抢走用户正在输入的登录表单
+            client.cancelAutomaticLogin();
             loginDialog.showError(QObject::tr("无法连接服务器：%1").arg(reason));
             autoLogin.fallbackToLogin();
         });

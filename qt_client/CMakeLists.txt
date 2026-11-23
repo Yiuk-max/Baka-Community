@@ -20,7 +20,8 @@ set(CMAKE_AUTORCC ON)
 #     -DCMAKE_CXX_COMPILER=D:/QT/Tools/mingw1310_64/bin/g++.exe
 # ---------------------------------------------------------------------------
 # WebSockets（QWebSocket）、Multimedia（提示音）不在 Qt 默认安装里，缺了用维护工具补装
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Network Multimedia WebSockets)
+# Sql（QSqlDatabase）是 Qt 默认安装自带的，SQLite 驱动是插件 plugins/sqldrivers/qsqlite.dll，不用另装 sqlite
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Network Multimedia WebSockets Sql Concurrent)
 
 qt_standard_project_setup()
 
@@ -53,10 +54,16 @@ set(APP_SOURCES
     src/main.cpp
     src/MainWindow.h
     src/MainWindow.cpp
+    src/MainWindowRequests.cpp
+    src/MainWindowCommunitySettings.cpp
+    src/MainWindowCommunityAssets.cpp
+    src/MainWindowAttachments.cpp
     src/AppConfig.h
     src/AppConfig.cpp
     src/ui/LoginPage.h
     src/ui/LoginPage.cpp
+    src/ui/VerifyEmailForm.h
+    src/ui/VerifyEmailForm.cpp
     src/ui/LoginDialog.h
     src/ui/LoginDialog.cpp
     src/ui/AutoLoginDialog.h
@@ -74,21 +81,83 @@ set(APP_SOURCES
     src/ui/SettingsDialog.cpp
     src/ui/AccountSettingsPage.h
     src/ui/AccountSettingsPage.cpp
+    src/ui/AvatarCropDialog.h
+    src/ui/AvatarCropDialog.cpp
     src/ui/BakaSettingsPage.h
     src/ui/BakaSettingsPage.cpp
     src/model/Contact.h
+    src/model/Message.h
+    src/model/DownloadTask.h
+    src/util/TimeFormat.h
     src/ui/ToolRail.h
     src/ui/ToolRail.cpp
     src/ui/SoundPlayer.h
     src/ui/SoundPlayer.cpp
+    src/ui/ChatPage.h
+    src/ui/ChatPage.cpp
+    src/ui/ChatPageMedia.cpp
+    src/ui/AttachmentWidget.h
+    src/ui/AttachmentWidget.cpp
+    src/ui/TransferProgressPanel.h
+    src/ui/TransferProgressPanel.cpp
+    src/ui/CommunityPage.h
+    src/ui/CommunityPage.cpp
+    src/ui/CommunityPageReplies.cpp
+    src/ui/CommunitySettingsDialog.h
+    src/ui/CommunitySettingsDialog.cpp
+    src/ui/CommunityOverviewPage.h
+    src/ui/CommunityOverviewPage.cpp
+    src/ui/CommunityOverviewAssets.cpp
+    src/ui/CommunityChannelsPage.h
+    src/ui/CommunityChannelsPage.cpp
+    src/ui/CommunityGuidePage.h
+    src/ui/CommunityGuidePage.cpp
+    src/ui/CommunityChannelList.h
+    src/ui/CommunityChannelList.cpp
+    src/ui/CommunityMembersPanel.h
+    src/ui/CommunityMembersPanel.cpp
+    src/ui/Composer.h
+    src/ui/Composer.cpp
+    src/ui/EmojiPanel.h
+    src/ui/EmojiPanel.cpp
+    src/ui/HomePage.h
+    src/ui/HomePage.cpp
+    src/ui/MessageRow.h
+    src/ui/MessageRow.cpp
+    src/ui/InputDialog.h
+    src/ui/InputDialog.cpp
+    src/ui/MenuStyle.h
+    src/ui/FileCover.h
+    src/ui/FileCover.cpp
+    src/ui/PendingPage.h
+    src/ui/PendingPage.cpp
+    src/ui/InviteDialog.h
+    src/ui/InviteDialog.cpp
     src/net/PacketCodec.h
     src/net/PacketCodec.cpp
     src/net/WsCore.h
     src/net/WsCore.cpp
     src/net/ChatClient.h
     src/net/ChatClient.cpp
+    src/net/ChatClientAuth.cpp
+    src/net/ChatClientReconnect.cpp
+    src/net/AvatarUploader.h
+    src/net/AvatarUploader.cpp
     src/net/TlsSetup.h
     src/net/TlsSetup.cpp
+    src/net/FileDownloader.h
+    src/net/FileDownloader.cpp
+    src/net/FileDownloaderTasks.cpp
+    src/net/DownloadJournal.h
+    src/net/DownloadJournal.cpp
+    src/store/MediaStore.h
+    src/store/MediaStore.cpp
+    src/store/AvatarStore.h
+    src/store/AvatarStore.cpp
+    src/store/DownloadWriter.h
+    src/store/DownloadWriter.cpp
+    src/util/DownloadPaths.h
+    src/util/DownloadPaths.cpp
     ${PROTO_SRCS}
 )
 
@@ -117,6 +186,7 @@ qt_add_resources(baka_client "appImages"
     BASE resources
     FILES resources/icons/badge-256.png
           resources/icons/settings.png
+          resources/icons/download.png
           resources/icons/toggle_off.png
           resources/icons/toggle_on.png
           resources/images/logo.png
@@ -140,10 +210,48 @@ target_include_directories(baka_client PRIVATE
 )
 
 target_link_libraries(baka_client PRIVATE
-    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Multimedia Qt6::WebSockets
+    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Multimedia Qt6::WebSockets Qt6::Sql Qt6::Concurrent
     ${Protobuf_LIBRARIES}
 )
 
 if(WIN32)
     set_target_properties(baka_client PROPERTIES WIN32_EXECUTABLE ON)
+endif()
+
+# 离线附件交互测试：独立开关，不恢复已删除的社区测试目标。
+option(BUILD_ATTACHMENT_TESTS "Build offline attachment behavior tests" OFF)
+if(BUILD_ATTACHMENT_TESTS)
+    enable_testing()
+    set(ATTACHMENT_TEST_SOURCES ${APP_SOURCES})
+    list(REMOVE_ITEM ATTACHMENT_TEST_SOURCES src/main.cpp resources/app.rc)
+    qt_add_executable(attachment_behavior_tests tests/attachments_behavior.cpp ${ATTACHMENT_TEST_SOURCES})
+    set_target_properties(attachment_behavior_tests PROPERTIES WIN32_EXECUTABLE OFF)
+    target_include_directories(attachment_behavior_tests PRIVATE
+        "${CMAKE_CURRENT_BINARY_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/src" ${Protobuf_INCLUDE_DIR})
+    target_link_libraries(attachment_behavior_tests PRIVATE
+        Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Multimedia Qt6::WebSockets
+        Qt6::Sql Qt6::Concurrent ${Protobuf_LIBRARIES})
+    target_compile_definitions(attachment_behavior_tests PRIVATE
+        BAKA_TEST_STYLE="${CMAKE_CURRENT_SOURCE_DIR}/resources/style.qss"
+        BAKA_TEST_SCREENSHOT="${CMAKE_CURRENT_BINARY_DIR}/attachments-offline.png")
+    qt_add_resources(attachment_behavior_tests "attachmentTestAssets" PREFIX "/" BASE resources FILES
+        resources/images/default_avatar.png resources/images/default_group_avatar.png
+        resources/images/default_comm_avatar.png resources/images/default_background.png
+        resources/images/logo.png resources/icons/download.png resources/icons/settings.png)
+    add_test(NAME attachment_behavior COMMAND attachment_behavior_tests -platform offscreen)
+
+    # 断线重连离线测试：只用 ChatClient + 本地假服务，不涉及界面
+    qt_add_executable(reconnect_behavior_tests tests/reconnect_behavior.cpp
+        src/net/ChatClient.cpp src/net/ChatClientAuth.cpp src/net/ChatClientReconnect.cpp
+        src/net/WsCore.cpp src/net/PacketCodec.cpp src/net/TlsSetup.cpp
+        src/util/DownloadPaths.cpp src/util/DownloadPaths.h
+        ${PROTO_SRCS})
+    set_target_properties(reconnect_behavior_tests PROPERTIES WIN32_EXECUTABLE OFF)
+    target_include_directories(reconnect_behavior_tests PRIVATE
+        "${CMAKE_CURRENT_BINARY_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/src" ${Protobuf_INCLUDE_DIR})
+    target_link_libraries(reconnect_behavior_tests PRIVATE
+        Qt6::Core Qt6::Network Qt6::WebSockets ${Protobuf_LIBRARIES})
+    qt_add_resources(reconnect_behavior_tests "reconnectTestAssets" PREFIX "/" BASE resources FILES
+        resources/images/default_avatar.png)
+    add_test(NAME reconnect_behavior COMMAND reconnect_behavior_tests)
 endif()

@@ -2,6 +2,7 @@
 
 #include "Assets.h"
 #include "Avatar.h"
+#include "MenuStyle.h"
 
 #include <QHBoxLayout>
 #include <QLabel>
@@ -9,6 +10,7 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QSignalBlocker>
+#include <QStackedWidget>
 #include <QVBoxLayout>
 
 namespace {
@@ -27,8 +29,15 @@ ContactPanel::ContactPanel(QWidget *parent) : QWidget(parent) {
     m_groupIcon = avatar::roundedIcon(assets::defaultGroupAvatar(), kAvatarSize, kAvatarSize / 2);
 
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(8, 10, 8, 8);
+    layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
+    m_sidebars = new QStackedWidget;
+    auto *direct = new QWidget;
+    auto *directLayout = new QVBoxLayout(direct);
+    directLayout->setContentsMargins(8, 10, 8, 0);
+    directLayout->setSpacing(0);
+    m_sidebars->addWidget(direct);
+    layout->addWidget(m_sidebars, 1);
 
     // 搜索框：在已加载的联系人里按名字过滤（不发请求）
     m_search = new QLineEdit;
@@ -36,15 +45,15 @@ ContactPanel::ContactPanel(QWidget *parent) : QWidget(parent) {
     m_search->setPlaceholderText(tr("搜索好友或群聊"));
     m_search->setFixedHeight(36);
     m_search->setClearButtonEnabled(true);
-    layout->addWidget(m_search);
+    directLayout->addWidget(m_search);
 
-    layout->addSpacing(14);
+    directLayout->addSpacing(14);
     auto *heading = new QLabel(tr("私信"));
     heading->setObjectName("contactHeading");
     heading->setContentsMargins(8, 0, 0, 0);
-    layout->addWidget(heading);
+    directLayout->addWidget(heading);
 
-    layout->addSpacing(6);
+    directLayout->addSpacing(6);
     m_list = new QListWidget;
     m_list->setObjectName("contactList");
     m_list->setIconSize(QSize(kAvatarSize, kAvatarSize));
@@ -53,7 +62,7 @@ ContactPanel::ContactPanel(QWidget *parent) : QWidget(parent) {
     m_list->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     m_list->setFocusPolicy(Qt::NoFocus);                            // 不要选中项外面的虚线框
     m_list->setSpacing(1);
-    layout->addWidget(m_list, 1);
+    directLayout->addWidget(m_list, 1);
 
     // 底部账号栏：自己的头像 + 昵称 + 在线状态
     layout->addSpacing(8);
@@ -64,9 +73,9 @@ ContactPanel::ContactPanel(QWidget *parent) : QWidget(parent) {
     accountLayout->setContentsMargins(10, 0, 10, 0);
     accountLayout->setSpacing(10);
 
-    auto *accountAvatar = new QLabel;
-    accountAvatar->setPixmap(avatar::rounded(assets::defaultAvatar(), kAvatarSize, kAvatarSize / 2));
-    accountLayout->addWidget(accountAvatar);
+    m_accountAvatar = new QLabel;
+    m_accountAvatar->setPixmap(avatar::user(QString(), kAvatarSize));
+    accountLayout->addWidget(m_accountAvatar);
 
     auto *accountText = new QVBoxLayout;
     accountText->setSpacing(1);
@@ -89,11 +98,38 @@ ContactPanel::ContactPanel(QWidget *parent) : QWidget(parent) {
     settingsButton->setCursor(Qt::PointingHandCursor);
     settingsButton->setToolTip(tr("设置"));
     accountLayout->addWidget(settingsButton);
-    layout->addWidget(accountBar);
+    auto *accountWrap = new QWidget;
+    auto *accountWrapLayout = new QVBoxLayout(accountWrap);
+    accountWrapLayout->setContentsMargins(8, 0, 8, 8);
+    accountWrapLayout->addWidget(accountBar);
+    layout->addWidget(accountWrap);
 
     connect(settingsButton, &QPushButton::clicked, this, &ContactPanel::settingsClicked);
     connect(m_search, &QLineEdit::textChanged, this, &ContactPanel::rebuildList);
     connect(m_list, &QListWidget::currentRowChanged, this, &ContactPanel::onCurrentRowChanged);
+    m_list->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_list, &QListWidget::customContextMenuRequested, this, &ContactPanel::showContextMenu);
+}
+
+void ContactPanel::setCommunitySidebar(QWidget *sidebar) {
+    m_sidebars->addWidget(sidebar);
+}
+
+void ContactPanel::showCommunitySidebar(bool community) {
+    m_sidebars->setCurrentIndex(community ? 1 : 0);
+}
+
+void ContactPanel::showContextMenu(const QPoint &pos) {
+    const QListWidgetItem *item = m_list->itemAt(pos);
+    if (!item) return;
+    // 先把联系人拷出来：菜单开着的时候列表可能刷新，item 会失效
+    const Contact contact = m_contacts.at(item->data(Qt::UserRole).toInt());
+    if (!contact.isGroup) return;
+
+    QMenu menu(this);
+    menus::prepare(&menu);
+    QAction *invite = menu.addAction(tr("邀请好友"));
+    if (menu.exec(m_list->viewport()->mapToGlobal(pos)) == invite) emit inviteRequested(contact);
 }
 
 void ContactPanel::setContacts(const QList<Contact> &contacts) {
@@ -109,6 +145,10 @@ void ContactPanel::setAccount(const QString &name, int uid) {
     m_accountName->setToolTip(tr("%1（UID %2）").arg(name).arg(uid));
 }
 
+void ContactPanel::setAccountAvatar(const QString &path) {
+    m_accountAvatar->setPixmap(avatar::user(path, kAvatarSize));
+}
+
 void ContactPanel::setOnline(bool online) {
     m_accountStatus->setText(online ? tr("在线") : tr("离线"));
 }
@@ -117,7 +157,21 @@ void ContactPanel::clear() {
     m_hasSelection = false;
     m_search->clear();
     m_accountName->clear();
+    setAccountAvatar(QString());
     setContacts({});
+}
+
+void ContactPanel::select(const Contact &contact) {
+    m_hasSelection = true;
+    m_selectedIsGroup = contact.isGroup;
+    m_selectedUid = contact.uid;
+    rebuildList();   // 重建时会按上面三个值恢复选中，且不发信号
+}
+
+void ContactPanel::clearSelection() {
+    m_hasSelection = false;
+    const QSignalBlocker blocker(m_list);
+    m_list->setCurrentRow(-1);
 }
 
 void ContactPanel::rebuildList() {
@@ -130,7 +184,10 @@ void ContactPanel::rebuildList() {
         const Contact &contact = m_contacts.at(i);
         if (!keyword.isEmpty() && !contact.name.contains(keyword, Qt::CaseInsensitive)) continue;
 
-        auto *item = new QListWidgetItem(contact.isGroup ? m_groupIcon : m_userIcon, contact.name);
+        const QIcon icon = contact.isGroup ? m_groupIcon
+                         : contact.avatarPath.isEmpty() ? m_userIcon
+                         : avatar::userIcon(contact.avatarPath, kAvatarSize);
+        auto *item = new QListWidgetItem(icon, contact.name);
         item->setData(Qt::UserRole, i);   // 记下它在 m_contacts 里的下标
         item->setSizeHint(QSize(0, kRowHeight));
         item->setToolTip(contact.isGroup ? tr("%1（群 %2）").arg(contact.name).arg(contact.uid)

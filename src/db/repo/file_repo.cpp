@@ -387,6 +387,48 @@ bool file_repo::set_transfer_file_id(int transfer_id, int file_id) {
     }
 }
 
+bool file_repo::can_access_file(int uid, int file_id) {
+    ConnGuard guard;
+    if (!guard) {
+        std::cerr << "[file_repo] can_access_file: no DB connection." << std::endl;
+        return false;  // fail-closed
+    }
+    try {
+        // 允许访问的条件：
+        //   1. uid 是该文件的上传者；
+        //   2. 该文件曾在 uid 参与的私聊、群聊、频道消息中被引用过。
+        std::unique_ptr<sql::PreparedStatement> pstmt(
+            guard.get()->prepareStatement(
+                "SELECT 1 FROM file WHERE id = ? AND uploader_uid = ? "
+                "UNION "
+                "SELECT 1 FROM message "
+                "WHERE file_id = ? AND is_file = 1 AND ("
+                "  sender_UID   = ? "
+                "  OR receiver_UID = ? "
+                "  OR (type = 'group' AND receiver_UID IN ("
+                "      SELECT group_UID FROM Groupmember WHERE member_UID = ?)) "
+                "  OR (type = 'channel' AND receiver_UID IN ("
+                "      SELECT c.id FROM community c "
+                "      JOIN community_member cm ON cm.community_id = c.core_channel_id "
+                "      WHERE cm.user_UID = ?)) "
+                ") "
+                "LIMIT 1"));
+        pstmt->setInt(1, file_id);
+        pstmt->setInt(2, uid);
+        pstmt->setInt(3, file_id);
+        pstmt->setInt(4, uid);
+        pstmt->setInt(5, uid);
+        pstmt->setInt(6, uid);
+        pstmt->setInt(7, uid);
+        std::unique_ptr<sql::ResultSet> rs(pstmt->executeQuery());
+        return rs->next();
+    } catch (const sql::SQLException& e) {
+        std::cerr << "[file_repo] can_access_file failed: " << e.what()
+                  << " (ERRNO=" << e.getErrorCode() << ")" << std::endl;
+        return false;  // fail-closed
+    }
+}
+
 bool file_repo::get_stale_transfers(int timeout_seconds,
                                     std::vector<file_transfer_info>& out) {
     ConnGuard guard;

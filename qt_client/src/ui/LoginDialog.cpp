@@ -39,6 +39,8 @@ LoginDialog::LoginDialog(QWidget *parent) : QDialog(parent) {
     // LoginPage 不关心自己是不是在对话框里，这里只做信号转发
     connect(m_page, &LoginPage::loginRequested, this, &LoginDialog::loginRequested);
     connect(m_page, &LoginPage::registerRequested, this, &LoginDialog::registerRequested);
+    connect(m_page, &LoginPage::verifyCodeSubmitted, this, &LoginDialog::verifyCodeSubmitted);
+    connect(m_page, &LoginPage::resendVerifyRequested, this, &LoginDialog::resendVerifyRequested);
 
 }
 
@@ -49,6 +51,16 @@ void LoginDialog::showError(const QString &message) { m_page->showError(message)
 void LoginDialog::showRegistered(const QString &uid, const QString &email) {
     m_page->showRegistered(uid, email);
 }
+
+void LoginDialog::showVerificationRequired(const QString &uid, const QString &email) {
+    m_page->showVerificationRequired(uid, email);
+}
+
+void LoginDialog::showVerified() { m_page->showVerified(); }
+
+void LoginDialog::showVerifyCodeSent(int seconds) { m_page->showVerifyCodeSent(seconds); }
+
+void LoginDialog::showVerifyCooldown(int seconds) { m_page->showVerifyCooldown(seconds); }
 
 void LoginDialog::resetForm() { m_page->resetForm(); }
 
