@@ -2,10 +2,10 @@
 import { ref, nextTick, computed, h, reactive, watch, onMounted, onUnmounted, withDirectives, vModelText } from 'vue'
 import { DEFAULT_AVATAR, DEFAULT_GROUP_AVATAR, DEFAULT_COMM_AVATAR, DEFAULT_COMM_BACKGROUND, QUICK_EMOJIS, PICKER_EMOJIS, AVATAR_TONES } from './data/ui.js'
 import { EMOJI_CATEGORIES } from './data/emoji.js'
-import { lang, setLang, t } from './data/i18n.js'
+import { t } from './data/i18n.js'
 import { Icon } from './components/icons.js'
 import { FileCover } from './components/file-cover.js'
-import { backend, api } from './backendClient.js'
+import { backend, api, fmtMessageTime, fmtFullTime } from './backendClient.js'
 import bakaAudioUrl from './assets/baka.mp3?inline'
 const active = ref('💬 チャット環状線')
 const activePage = ref('dm')
@@ -171,7 +171,6 @@ const profileBackgroundImage = ref('')
 const nicknameSaving = ref(false)
 const closeAfterNicknameSave = ref(false)
 const selectedSetting = ref('账户')
-const themeChoice = ref('dark')
 const friendSearch = ref('')
 const inviteUrl = ref('功能暂未开发')
 const joinCode = ref('')
@@ -358,7 +357,7 @@ const MessageRow = (props) => {
     h('b', { class: record.tone || '' }, record.author),
     ...(record.tags || []).map((tag) => tagPill(tag)),
     record.mutual ? h('span', { class: 'mutual-badge', title: t('共同服务器') }, 'M') : null,
-    h('time', {}, record.time)
+    h('time', { title: fmtFullTime(record.ts) || null, datetime: record.ts ? new Date(record.ts).toISOString() : null }, fmtMessageTime(record.ts, record.time))
   ]))
   if (record.text) {
     const jumbo = isEmojiOnlyMessage(record.text)
@@ -419,6 +418,7 @@ const MessageRow = (props) => {
     h('div', { class: ['avatar', record.avatar, { 'has-image': !!record.avatarImage }] }, record.avatarImage
       ? h('img', { src: record.avatarImage, alt: record.author })
       : record.author[0]),
+    record.grouped && record.ts ? h('time', { class: 'grouped-time', title: fmtFullTime(record.ts) }, fmtMessageTime(record.ts, record.time).split(' ').pop()) : null,
     h('div', { class: 'message-body' }, content),
     h(MessageActions)
   ])
@@ -1101,7 +1101,7 @@ const submitJoinGroup = () => {
 }
 const openSettings = () => { settingsMobileDetail.value=false; settingsOpen.value=true }
 const openProfileSettings = () => { selectedSetting.value='账户'; settingsMobileDetail.value=true; settingsOpen.value=true; profileEditorOpen.value=true }
-const selectSetting = (name) => { selectedSetting.value = name; settingsMobileDetail.value=true; if (!['账户','Baka','文件','外观','语言'].includes(name)) notDeveloped(name) }
+const selectSetting = (name) => { selectedSetting.value = name; settingsMobileDetail.value=true; if (!['账户','Baka','文件'].includes(name)) notDeveloped(name) }
 const handleProfileBackground = (event) => { event.target.value = ''; notDeveloped(t('个人资料背景')) }
 const closeSettings = () => { settingsOpen.value = false; settingsMobileDetail.value=false; profileEditorOpen.value = false; profileBackgroundMenu.value = false }
 const closeProfileEditor = () => { profileEditorOpen.value = false; profileBackgroundMenu.value = false }
@@ -1178,7 +1178,6 @@ watch(profileEditorOpen, (open) => {
   nicknameSaving.value = false
   closeAfterNicknameSave.value = false
 })
-watch(themeChoice, (theme) => { if (backend.uid && theme !== 'device') api.changeTheme(theme) })
 watch(() => [backend.authenticated, backend.connected, backend.authenticating, backend.reconnecting], ([authenticated, connected, authenticating, reconnecting]) => {
   demoLoginOpen.value = !authenticated && (!connected || !authenticating || reconnecting)
 }, { immediate: true })
@@ -1330,7 +1329,7 @@ const searchResults = computed(() => {
       const text = String(record.text || '')
       const files = (record.files || []).map((f) => f.name).join(' ')
       const hay = `${text} ${files}`.toLowerCase()
-      if (hay.includes(q)) results.push({ id: record.id, author: record.author, time: record.time, text: text || files, conversation: conv.name })
+      if (hay.includes(q)) results.push({ id: record.id, author: record.author, time: fmtMessageTime(record.ts, record.time), ts: record.ts, text: text || files, conversation: conv.name })
     }
   }
   return results.slice(0, 60)
@@ -1363,7 +1362,7 @@ const SearchPanel = () => {
           h('div', { class: 'search-result-meta' }, [
             h('b', null, result.conversation),
             h('span', null, result.author),
-            h('time', null, result.time)
+            h('time', { title: fmtFullTime(result.ts) || null }, result.time)
           ]),
           h('p', null, highlightMatch(result.text, searchQuery.value))
         ])))
@@ -1787,25 +1786,15 @@ const confirmAvatarCrop = () => {
           <button :class="{active:selectedSetting==='Baka'}" @click="selectSetting('Baka')"><img class="settings-nav-logo" src="/logo.png" alt="">Baka</button>
           <button :class="{active:selectedSetting==='文件'}" @click="selectSetting('文件')"><svg viewBox="0 0 24 24"><path d="M6 2h8l6 6v14H6z"/><path d="M14 2v6h6"/></svg>{{ t("文件") }}</button>
           <div class="settings-divider"></div>
-          <div class="settings-group-label">体验</div>
-          <button :class="{active:selectedSetting==='外观'}" @click="selectSetting('外观')"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18h1.3a2 2 0 0 0 1.5-3.3 1.8 1.8 0 0 1 1.4-3h1.1A3.7 3.7 0 0 0 21 11c0-4.4-4-8-9-8Z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7.5" r="1"/><circle cx="15" cy="8" r="1"/></svg>{{ t("外观") }}</button>
-          <button :class="{active:selectedSetting==='系统'}" @click="selectSetting('系统')"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8m-4-4v4M7 9h.01M10 9h.01M13 9h.01M16 9h.01M7 13h10"/></svg>{{ t("系统") }}</button>
-          <button :class="{active:selectedSetting==='语言'}" @click="selectSetting('语言')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>{{ t("语言") }}</button>
-          <div class="settings-divider"></div>
           <button class="logout-setting" @click="closeSettings();demoLogout()"><Icon name="logout"/>{{ t("登出") }}</button>
         </nav>
       </aside>
       <main class="settings-main">
-        <header class="settings-header"><button class="settings-mobile-back" :aria-label="t('返回设置菜单')" @click="settingsMobileDetail=false">‹</button><b>{{ selectedSetting === '外观' ? '外观' : selectedSetting }}</b><button aria-label="关闭设置" @click="closeSettings">×</button></header>
+        <header class="settings-header"><button class="settings-mobile-back" :aria-label="t('返回设置菜单')" @click="settingsMobileDetail=false">‹</button><b>{{ selectedSetting }}</b><button aria-label="关闭设置" @click="closeSettings">×</button></header>
         <div class="settings-scroll">
           <div v-if="selectedSetting==='账户'" class="account-settings-content">
             <section class="account-section"><h1>{{ t("账号信息") }}</h1><div class="account-info-row"><span>{{ t("用户名") }}</span><b>{{demoNickname}}</b><button @click="profileEditorOpen=true">{{ t("编辑") }}</button></div><div class="account-info-row"><span>{{ t("账号 UID") }}</span><b>{{demoUid||'—'}}</b></div><div class="account-info-row"><span>{{ t("邮箱") }}</span><b>{{demoEmail||'未绑定'}}</b><button @click="emailEditOpen=!emailEditOpen">{{emailEditOpen?t('取消'):t('编辑')}}</button></div><div v-if="emailEditOpen" class="account-inline-form"><input v-model="demoEmail" type="email" placeholder="name@example.com"><button class="settings-row-button" @click="saveEmail">保存邮箱</button></div></section>
             <section class="account-section"><h2>密码和安全中心</h2><div class="account-info-row"><span>{{ t("密码") }}</span><b>••••••••</b><button @click="passwordEditOpen=!passwordEditOpen">{{passwordEditOpen?t('取消'):t('修改')}}</button></div><div v-if="passwordEditOpen" class="account-inline-form password-form"><input v-model="oldPassword" type="password" :placeholder="t('当前密码')"><input v-model="newPassword" type="password" :placeholder="t('新密码')"><button class="settings-row-button" @click="savePassword">保存密码</button></div></section>
-          </div>
-          <div v-else-if="selectedSetting==='外观'" class="appearance-content">
-            <h1>{{ t("主题") }}</h1>
-            <h3>{{ t("默认主题") }}</h3>
-            <div class="theme-options"><button v-for="theme in ['light','gray','dark','black','device']" :key="theme" class="theme-swatch" :class="[theme,{chosen:themeChoice===theme}]" :aria-label="theme" @click="themeChoice=theme"><i v-if="themeChoice===theme">✓</i></button></div>
           </div>
           <div v-else-if="selectedSetting==='Baka'" class="baka-settings-content">
             <section class="settings-section">
@@ -1826,9 +1815,6 @@ const confirmAvatarCrop = () => {
             <div class="demo-doc-note"><b>传输操作</b><span>上传初始化 · 文件分片 · 完成校验 · 断点续传 · 下载 · 暂停 / 继续 / 取消 · 文件列表 / 删除</span><small>文件通过 WebSocket 分片传输，并由服务器持久化。</small></div>
           </div>
 
-          <div v-else-if="selectedSetting==='语言'" class="account-settings-content">
-            <section class="account-section"><h1>{{ t("语言") }}</h1><p>{{ t("选择界面显示语言。") }}</p><div class="language-options"><button :class="{active:lang==='zh'}" @click="setLang('zh')">{{ t("中文") }}</button><button :class="{active:lang==='en'}" @click="setLang('en')">English</button></div></section>
-          </div>
           <div v-else class="settings-placeholder"><h1>{{ selectedSetting }}</h1><p>在这里调整 {{ selectedSetting }} 相关设置。</p></div>
         </div>
       </main>

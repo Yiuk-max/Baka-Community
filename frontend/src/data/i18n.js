@@ -2,7 +2,8 @@ import { ref } from 'vue'
 
 const KEY = 'chat.lang'
 export const lang = ref('zh')
-try { lang.value = localStorage.getItem(KEY) === 'en' ? 'en' : 'zh' } catch {}
+// 设置页已移除语言切换入口，界面固定中文（清掉旧的 en 偏好，避免用户被锁在英文界面）
+try { localStorage.removeItem(KEY) } catch {}
 
 export const setLang = (l) => {
   lang.value = l === 'en' ? 'en' : 'zh'
@@ -17,7 +18,7 @@ const DICT = {
   '接受': 'Accept', '拒绝': 'Reject', '忽略': 'Ignore', '继续': 'Resume', '暂停': 'Pause', '重试': 'Retry',
   '复制': 'Copy', '更多': 'More', '回复': 'Reply', '转发': 'Forward', '撤回': 'Recall',
   '添加': 'Add', '移除': 'Remove', '邀请': 'Invite', '重置': 'Reset', '试听': 'Preview',
-  '当前账户': 'Current account',
+  '当前账户': 'Current account', '今天': 'Today', '昨天': 'Yesterday',
   // 状态
   '在线': 'Online', '离线': 'Offline', '闲置': 'Idle', '未登录': 'Not signed in',
   '已完成': 'Completed', '失败': 'Failed', '已取消': 'Canceled', '已暂停': 'Paused',

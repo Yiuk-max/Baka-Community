@@ -334,13 +334,37 @@ function avatarIdForUid(uid) {
   if (contact?.avatarId) return contact.avatarId
   return Object.values(backend.members).flat().find((item) => Number(item.uid) === Number(uid))?.avatarId || 0
 }
-// 后端统一用 UTC 存时间（"YYYY-MM-DD HH:MM:SS"），这里转成浏览器本地时区的 HH:MM 显示
-const fmtClockFromUtc = (ts) => {
+// 后端统一用 UTC 存时间（"YYYY-MM-DD HH:MM:SS"），解析为毫秒时间戳，显示时再转浏览器本地时区
+const parseUtcMs = (ts) => {
   const s = String(ts || '')
-  if (!s) return ''
-  const d = new Date(s.includes('T') ? (s.endsWith('Z') ? s : s + 'Z') : s.replace(' ', 'T') + 'Z')
-  if (Number.isNaN(d.getTime())) return s.slice(11, 16)  // 兜底：格式异常时退回原 HH:MM
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  if (!s) return 0
+  const d = new Date(s.includes('T') ? (/(Z|[+-]\d\d:?\d\d)$/.test(s) ? s : s + 'Z') : s.replace(' ', 'T') + 'Z')
+  return Number.isNaN(d.getTime()) ? 0 : d.getTime()
+}
+const pad2 = (n) => String(n).padStart(2, '0')
+const clockOf = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
+const fmtClockFromUtc = (ts) => {
+  const ms = parseUtcMs(ts)
+  return ms ? clockOf(new Date(ms)) : String(ts || '').slice(11, 16)  // 兜底：格式异常时退回原 HH:MM
+}
+// 消息时间：今天 HH:MM / 昨天 HH:MM / 今年 MM-DD HH:MM / 往年 YYYY-MM-DD HH:MM
+export function fmtMessageTime(ms, fallback = '') {
+  if (!ms) return fallback
+  const d = new Date(ms)
+  const now = new Date()
+  const dayStart = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  const diffDays = Math.round((dayStart(now) - dayStart(d)) / 86400000)
+  if (diffDays === 0) return `${t('今天')} ${clockOf(d)}`
+  if (diffDays === 1) return `${t('昨天')} ${clockOf(d)}`
+  const md = `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+  if (d.getFullYear() === now.getFullYear()) return `${md} ${clockOf(d)}`
+  return `${d.getFullYear()}-${md} ${clockOf(d)}`
+}
+// 完整时间（悬停提示用）：YYYY-MM-DD HH:MM:SS
+export function fmtFullTime(ms) {
+  if (!ms) return ''
+  const d = new Date(ms)
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${clockOf(d)}:${pad2(d.getSeconds())}`
 }
 function recordOf(item, conv) {
   const mine = Number(item.sender_UID) === Number(backend.uid)
@@ -350,7 +374,7 @@ function recordOf(item, conv) {
   return {
     id: String(item.message_id || `local-${++localSeq}`), messageId: Number(item.message_id || 0),
     mine, author: mine ? backend.name : (item.sender_name || conv.name), authorKey: mine ? 'self' : `member:${item.sender_UID}`,
-    avatarImage: backend.fileUrls[avatarId] || '/default_avatar.png', text: item.content || '', time: fmtClockFromUtc(item.timestamp), reply,
+    avatarImage: backend.fileUrls[avatarId] || '/default_avatar.png', text: item.content || '', time: fmtClockFromUtc(item.timestamp), ts: parseUtcMs(item.timestamp), reply,
     files: item.is_file ? [{ fileId: String(item.file_id || ''), name: item.file_name || '文件', size: Number(item.file_size || 0), url: '' }] : null,
     senderUid: Number(item.sender_UID || 0),
   }
@@ -376,7 +400,10 @@ function regroup(conv) {
       previousVisible = null
       return { ...item, grouped: false }
     }
-    const grouped = !!previousVisible && previousVisible.authorKey === item.authorKey && !item.reply
+    // 同一作者连续消息合并成组；但间隔超过 7 分钟或跨天时另起一组，确保时间（含日期）可见
+    const closeInTime = !item.ts || !previousVisible?.ts || (Math.abs(item.ts - previousVisible.ts) <= 7 * 60000
+      && new Date(item.ts).toDateString() === new Date(previousVisible.ts).toDateString())
+    const grouped = !!previousVisible && previousVisible.authorKey === item.authorKey && !item.reply && closeInTime
     previousVisible = item
     return { ...item, grouped }
   })
@@ -613,7 +640,7 @@ export function sendChat(text, replyId = 0, replySnapshot = null) {
   if (!send(payload)) return false
   if (conv.kind === 'private') {
     const localId = `local-${++localSeq}`
-    conv.messages.push({ id: localId, messageId: 0, mine: true, author: backend.name, authorKey: 'self', avatarImage: backend.fileUrls[backend.avatarId] || '/default_avatar.png', text, time: nowClock(), reply: replySnapshot && Number(replyId)>0 ? { id: String(replyId), author: replySnapshot.author || '成员', text: replySnapshot.text || '' } : null })
+    conv.messages.push({ id: localId, messageId: 0, mine: true, author: backend.name, authorKey: 'self', avatarImage: backend.fileUrls[backend.avatarId] || '/default_avatar.png', text, time: nowClock(), ts: Date.now(), reply: replySnapshot && Number(replyId)>0 ? { id: String(replyId), author: replySnapshot.author || '成员', text: replySnapshot.text || '' } : null })
     messageAcks.push({ key: conv.key, localId })
     regroup(conv)
   } else messageAcks.push({ key: conv.key, localId: '' })
@@ -655,7 +682,6 @@ export function communityRole(id, uid, promote) { const ok=send({ type: 'modify_
 export function changeName(name) { return send({ type: 'change_name', new_name: name }) }
 export function setEmail(email) { return send({ type: 'set_email', email }) }
 export function setAvatar(fileId) { return send({ type: 'set_avatar', file_id: String(fileId) }) }
-export function changeTheme(theme) { return send({ type: 'change_theme', theme }) }
 
 const nowClock = () => { const now = new Date(); return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}` }
 
@@ -824,7 +850,7 @@ function sendFileMessage(key, file) {
   if (!send(payload)) return
   if (conv.kind === 'private') {
     const localId = `local-${++localSeq}`
-    conv.messages.push({ id: localId, messageId: 0, mine: true, author: backend.name, authorKey: 'self', avatarImage: backend.fileUrls[backend.avatarId] || '/default_avatar.png', text: '', time: nowClock(), reply: null, files: [{ fileId: file.fileId, name: file.name, size: file.size, url: '' }] })
+    conv.messages.push({ id: localId, messageId: 0, mine: true, author: backend.name, authorKey: 'self', avatarImage: backend.fileUrls[backend.avatarId] || '/default_avatar.png', text: '', time: nowClock(), ts: Date.now(), reply: null, files: [{ fileId: file.fileId, name: file.name, size: file.size, url: '' }] })
     regroup(conv); messageAcks.push({ key: conv.key, localId })
   } else messageAcks.push({ key: conv.key, localId: '' })
 }
@@ -990,7 +1016,7 @@ export const api = {
   selectConversation, markConversationRead, requestHistory, sendChat, deleteMessage,
   addFriend, handleFriend, removeFriend, setFriendRemark, createGroup, joinGroup, groupAdd, groupRemove, groupRename, groupDelete, groupRole, handleGroupRequest,
   createCommunity, joinCommunity, leaveCommunity, deleteCommunity, modifyCommunity, createChannel, deleteChannel, handleCommunityRequest, communityAdd, communityRemove, communityRole,
-  changeName, setEmail, setAvatar, changeTheme, ensureFileUrl,
+  changeName, setEmail, setAvatar, ensureFileUrl,
   uploadFile, downloadFile, pauseTransfer, bindResumeFile, resumeTransfer, cancelTransfer, dismissTransfer, requestFileList, deleteFile,
   activeConversation,
 }

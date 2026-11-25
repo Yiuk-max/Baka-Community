@@ -546,6 +546,10 @@ html.sidebar-resizing .sidebar-resizer::after{background:#5865f2}
 .meta{gap:8px;height:22px;color:var(--text-3)}
 .meta b{font-size:16px;font-weight:500;color:#f2f3f5}
 .meta time{margin-left:2px;color:var(--text-4);font-size:12px}
+/* 合并组内消息：悬停时在头像列显示 HH:MM，完整日期见 title */
+.message .grouped-time{position:absolute;left:0;top:4px;width:72px;text-align:center;color:var(--text-4);font-size:11px;line-height:22px;opacity:0;pointer-events:none;white-space:nowrap}
+.message.grouped:hover .grouped-time{opacity:1;pointer-events:auto}
+.meta time{white-space:nowrap}
 .message p{margin:0;color:#efeff1;font-size:16px;line-height:1.375;white-space:pre-wrap;overflow-wrap:anywhere}
 .message p a,.message a{color:#00a8fc;text-decoration:none}
 .message p a:hover,.message a:hover{text-decoration:underline}
@@ -646,6 +650,7 @@ html.sidebar-resizing .sidebar-resizer::after{background:#5865f2}
 @media(max-width:1100px){
   .discord-app{grid-template-columns:var(--rail-w) 220px minmax(0,1fr)}
   .message{padding:2px 32px 2px 60px}
+  .message .grouped-time{width:60px}
   .message .avatar{left:12px}
   .message.has-reply:not(.grouped)::before{left:31px;width:24px}
   .message.system-message{padding:2px 32px 2px 60px}
@@ -661,6 +666,7 @@ html.sidebar-resizing .sidebar-resizer::after{background:#5865f2}
   .discord-app{grid-template-columns:var(--rail-w) minmax(0,1fr)}
   .chat-tools button:nth-child(-n+3){display:grid}
   .message{padding:2px 16px 2px 56px}
+  .message .grouped-time{width:56px}
   .message .avatar{left:8px}
   .message.has-reply:not(.grouped)::before{left:27px;width:24px}
   .message.system-message{padding:2px 16px 2px 56px}
@@ -744,10 +750,6 @@ html.sidebar-resizing .sidebar-resizer::after{background:#5865f2}
 .crop-dialog footer .crop-confirm{background:#5865f2;color:#fff}
 .crop-backdrop{z-index:4100}
 
-.language-options{display:flex;gap:10px;margin-top:14px}
-.language-options button{height:40px;padding:0 18px;border:1px solid #3c3e46;border-radius:8px;background:#24252b;color:#dcdee3;font-size:14px;cursor:pointer}
-.language-options button:hover{background:#2c2d34}
-.language-options button.active{border-color:#5865f2;background:#303248;color:#fff}
 
 .settings-mobile-header,.settings-mobile-back,.community-settings-back,.community-settings-mobile-title{display:none}
 .mobile-home-account-card{display:none}
@@ -869,9 +871,9 @@ html.sidebar-resizing .sidebar-resizer::after{background:#5865f2}
   .baka-settings-content .settings-row-copy small{max-width:none}
   .baka-settings-content .volume-slider{width:clamp(104px,36vw,140px);flex:none}
   .baka-settings-content .toggle{flex:none}
-  .account-settings-content,.appearance-content,.settings-placeholder{width:calc(100% - 20px);margin:20px auto 28px}
+  .account-settings-content,.settings-placeholder{width:calc(100% - 20px);margin:20px auto 28px}
   .account-settings-content{max-width:none}
-  .appearance-content h1,.settings-placeholder h1{font-size:22px}
+  .settings-placeholder h1{font-size:22px}
   .appearance-setting{gap:10px;align-items:flex-start}
   .server-theme select{width:100%;max-width:175px}
   .community-settings-backdrop{padding:0}
