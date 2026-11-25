@@ -94,4 +94,11 @@ public:
     // 查询超过 timeout_seconds 秒无活动的传输会话（watchdog 用）。
     virtual bool get_stale_transfers(int timeout_seconds,
                                      std::vector<file_transfer_info>& out) = 0;
+
+    // 下载鉴权：uid 是否有权访问 file_id。
+    // 满足以下任一条件即允许：
+    //   1. uid 是文件上传者；
+    //   2. 该文件曾通过 message 表在 uid 参与的私聊/群聊/频道中发送过。
+    // 查询失败时保守返回 false（fail-closed）。
+    virtual bool can_access_file(int uid, int file_id) = 0;
 };

@@ -1,0 +1,6 @@
+{
+    "server_url": "wss://bakacomm.world/ws",
+    "media_cache": {
+        "small_video_max_bytes": 20971520
+    }
+}

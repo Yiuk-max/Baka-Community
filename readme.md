@@ -1,176 +1,183 @@
-# Baka Community（聊天服务器 · C++17 / epoll 主从 Reactor / WebSocket）
+# Baka Community
 
-基于 epoll + 主从 Reactor 多线程模型的 TCP 聊天服务器，支持注册/登录、私聊、群聊、社区（频道）、好友系统、主题设置、文件传输。
-另提供平行的 **Boost.Asio + Beast WebSocket 网络层**，由 `configure.json` 的 `net_layer` 在启动时二选一，两种模式复用同一套业务层。
-两种网络模式的业务消息统一使用 `src/proto/message.proto` 定义的 protobuf `chat_proto.Envelope`；WebSocket 使用 binary 帧 `4B payload_len + protobuf`。WebSocket 模式已支持注册/登录、私聊、群聊、好友、离线消息、心跳等即时通讯业务，**文件传输暂未支持**。
+一个即时通讯 / 社区（Discord 式频道）项目：**C++17 后端 + Vue 3 网页前端**，
+支持私聊、群聊、好友、文件传输与离线消息。后端提供 epoll 与 Boost.Asio 两套网络实现，
+协议统一走 protobuf，浏览器打开网址即可使用。
 
-## 快速开始
+线上地址：**https://bakacomm.world**（HTTPS 页面 + WSS 连接，由 Nginx / Cloudflare 终结 TLS，
+C++ 服务本身只监听明文 `:8080`）
+
+---
+
+## 项目概览
+
+仓库覆盖 IM 系统的主要链路：网络、协议、存储、业务。
+
+- **网络层**：Linux `epoll` + 主从 Reactor 多线程模型；另有一份 Boost.Asio + Beast 的 WebSocket 实现，
+  启动时由配置二选一，两条路径复用同一套业务代码。
+- **协议层**：请求与响应统一用 protobuf 编码。所有消息共用一个 `Envelope`，靠 `type` 区分种类，
+  新增功能不需要改帧格式。
+- **业务层**：登录态、好友关系、群成员、社区权限、离线消息、文件分片等，按消息类型拆成独立 handler。
+- **存储层**：MySQL 存关系数据，Redis 缓存热点数据。
+- **前端**：Vue 3 单页应用，构建产物由 C++ 服务静态托管，因此对外只需要 8080 一个端口。
+
+## 功能
+
+| 模块 | 能力 |
+|---|---|
+| 账号 | 注册、UID / 邮箱登录、token 自动登录（7 天滑动过期）、改昵称 / 邮箱 / 头像 / 主题、被顶号下线 |
+| 私聊 | 双向会话、回复引用、删除消息、离线消息补收 |
+| 群聊 | 建群 / 拉人 / 踢人 / 改名 / 转让与身份管理、入群申请审批 |
+| 社区 | Discord 式结构：社区 = 核心频道 + 若干普通频道，成员角色 owner / admin / member，频道分区 |
+| 好友 | 按邮箱申请、同意 / 拒绝 / 删除、备注名、结构化好友列表 |
+| 文件 | 分片上传下载（4 MiB/片）、进度、暂停 / 继续、断线重连续传、过期会话 watchdog |
+| 其他 | 业务层心跳、结构化联系人 / 频道 / 成员列表、消息与文件的时间统一存 UTC |
+
+## 架构
+
+```
+            浏览器 (Vue 3 SPA)
+                   │  HTTPS / WSS
+              Nginx / Cloudflare        ← 证书、静态资源、反代（deploy/nginx-chat.conf）
+                   │  明文 ws
+        ┌──────────▼──────────┐
+        │   C++ 服务 :8080     │
+        │  ┌────────────────┐  │
+        │  │ 网络层（二选一） │  │  epoll 主从 Reactor  或  Boost.Asio + Beast
+        │  └───────┬────────┘  │
+        │   IClientTransport   │  传输抽象：业务层不关心是 TCP 还是 WS
+        │  ┌───────▼────────┐  │
+        │  │ 业务层 handlers │  │  account / chat / group / community / friend / file
+        │  └───────┬────────┘  │
+        │  ┌───────▼────────┐  │
+        │  │ 数据层 repo     │  │  repo_interface 契约 + MySQL 实现
+        │  └───────┬────────┘  │
+        └──────────┼───────────┘
+             ┌─────▼─────┐   ┌──────────┐
+             │  MySQL    │   │  Redis   │
+             └───────────┘   └──────────┘
+```
+
+几个关键设计：
+
+- **传输抽象**：`IClientTransport` 抽象出"怎么发字节"，因此 epoll 与 WebSocket 两套网络层共享
+  同一份 `client_session` 与 handler。
+- **单一信封**：`Envelope` 承载所有字段，字段号一经发布不再改，只追加。协议定义唯一来源是
+  `src/proto/message.proto`。
+- **两套帧格式**：TCP binary 模式是「4 字节总长度 + 4 字节 payload 长度 + protobuf」；
+  WebSocket 模式自带消息边界，只需「4 字节 payload 长度 + protobuf」，文件数据追加在帧尾。
+- **时间统一 UTC**：MySQL 时区固定 `+00:00`，`last_login_time` 用 `gmtime` 生成，前端拿
+  `"YYYY-MM-DD HH:MM:SS"` 后转本地时区显示。
+- **连接与线程**：主 Reactor 管 accept / 读事件，业务丢进线程池；每个会话独立 strand，
+  同一连接的收发不会并发。
+
+## 技术栈
+
+| 层 | 选型 |
+|---|---|
+| 语言 / 构建 | C++17、CMake、Ninja |
+| 网络 | Linux epoll（主从 Reactor）／ Boost.Asio + Beast WebSocket |
+| 协议 | protobuf 3（`chat_proto.Envelope`） |
+| 存储 | MySQL 8（11 张表）、Redis（redis-plus-plus，已落地 C1/C2/C4/C7–C11 缓存点） |
+| 前端 | Vite + Vue 3，构建产物输出到 `web/` 由后端静态托管 |
+
+## 快速开始（本地跑起来）
 
 ```bash
-# 第一次：把配置文件复制到运行目录（见下方"配置文件"）
+# 1) 依赖：boost / protobuf / mysql-connector-c++ / hiredis（Redis 客户端经 FetchContent 自动拉取）
+sudo apt install -y libboost-dev libboost-system-dev libprotobuf-dev protobuf-compiler \
+                    libmysqlcppconn-dev
+
+# 2) 配置：配置文件按「运行目录」的相对路径读取，所以先拷到构建目录
 cp configure.json build/
+cd build && cmake .. && cmake --build . -j8
 
-# 首次配置
-cd build
-cmake ..
+# 3) 建库（见 sql/create_table.sql、sql/file_system.sql）
+mysql -u root -p < ../sql/create_table.sql
+mysql -u root -p < ../sql/file_system.sql
 
-# 编译（之后每次改动只需这一条）
-cd build
-cmake --build . -j8
-
-# 运行（监听 :8080，兼容 IPv4/IPv6）
-cd build
+# 4) 启动（默认 :8080）
 ./server
 ```
 
-## 配置文件
-
-服务器启动时读取**相对路径** `configure.json`（即当前工作目录下的文件）。程序通常从 `build/` 目录运行，因此请先执行 `cp configure.json build/`（或在 `build/` 下创建该文件）再启动，否则只读到默认值。配置文件包含：
-
-1. 网络层：`net_layer`（`"binary"` 或 `"websocket"`，默认 `binary`，启动时二选一，改完重启）；
-   `websocket` 子对象可配置 `path`（默认 `/ws`）、`io_threads`、`max_message_bytes`、`max_pending_bytes`、
-   `web_root`（静态前端资源目录，默认 `./web`）。
-2. 心跳：`use_heartbeat`（开关）、`heartbeat_interval`（超时秒数）。
-3. 连接上限：`max_connections`（最大并发连接数，默认 10000，达到后拒绝新连接）。
-4. 业务线程池：`business_threads`（业务线程池线程数，默认 8，binary 与 websocket 共用）。
-5. 数据库连接池：`database` 下的 `host / port / user / password / dbname / db_conn_count`
-   （`db_conn_count` 为连接池上限，默认 4）。
-6. Redis 缓存：`redis` 下的 `enabled / host / port / password / db / pool_size / timeout_ms`
-   （`enabled=false` 时关闭缓存，回退纯 MySQL；已实现 C1 群成员 / C2 账号 / C4 邮箱 / C7-C11 社区缓存，详见《Redis缓存方案-done.md》）。
-
-> 后端构建依赖 Boost 与 protobuf（`libboost-dev`、`libboost-system-dev`、`libprotobuf-dev`、`protobuf-compiler`）。
-> Redis 缓存依赖 `redis-plus-plus`（基于 hiredis），构建时经 CMake `FetchContent` 从 GitHub 自动拉取源码并静态链接，
-> 因此**首次 configure 需要网络**。`net_layer` 是运行时选择，因此同一个二进制总是包含两套网络代码；
-> 前端依赖 `protobufjs`，由 `npm install` 安装。
-
-未读到配置文件时使用默认值（连接信息见《数据库设计.txt》），可能连不上你的数据库。
-
-## 时区
-
-后端全链路统一 **UTC** 存储时间：MySQL 的 `NOW()`/`CURRENT_TIMESTAMP` 固定为 UTC（`default-time-zone = '+00:00'`），
-C++ 的 `last_login_time` 用 `gmtime` 生成、`parse_datetime` 按 UTC 解析（不依赖系统时区）；
-前端拿到 `"YYYY-MM-DD HH:MM:SS"`(UTC) 后转浏览器本地时区显示。
-
-- 全新部署：只需把 MySQL 时区设为 UTC，见《部署文档.md》3.3 节。
-- 旧库升级（时间差 8 小时）：执行 `sql/set_timezone_utc.sql` 做一次性迁移。
-
-## 网络层切换（binary / websocket）
-
-`net_layer` 在启动时读取，改完需要重启；**两种模式只能同时跑一个，都占用 8080 端口**。
-
-编辑运行目录下的 `configure.json`（通常是 `build/configure.json`）：
-
-- **用 WebSocket**：设置 `"net_layer": "websocket"`，浏览器 / WebSocket 客户端连 `ws://<host>:8080/ws`。
-  同一端口还会以 HTTP 提供前端页面：浏览器直接打开 `http://<host>:8080/` 即可（静态资源目录由 `websocket.web_root` 指定）。
-- **使用 TCP binary 模式**：把 `net_layer` 改成 `"binary"`（或直接删掉该字段，默认就是 `binary`）再启动，TCP 客户端需遵循当前 protobuf 帧协议连接 `:8080`。
-  此时不再提供 HTTP 页面（binary 模式没有 HTTP 处理）。
-
-> 切错协议会立刻连不上，这是预期的：websocket 模式只接受 WS 握手（错误路径返回 404，非升级请求返回 426）；
-> binary 模式只认自定义帧。`use_heartbeat` / `heartbeat_interval` 对两种模式都生效。
-
-启动后日志会明确打印当前网络层，例如：
-
-```
-[ServerConfig] net_layer=websocket, use_heartbeat=false, heartbeat_interval=60s, ws_path=/ws, ws_io_threads=4, web_root=../web, max_connections=10000, db_conn_count=4
-[MySQL_Conn_Pool] initialized 4/4 connections.
-[RedisPool] connected to 127.0.0.1:6379, pool_size 4
-[ws] WebSocket server listening on port 8080, path /ws, io_threads 4
-```
-
-### 浏览器快速测试
-
-**方式一（推荐）**：直接打开服务端提供的聊天页 `http://<host>:8080/`（仅 websocket 模式）。
-前端是 **Vite + Vue 3** 项目，源码在 `frontend/`，构建产物输出到 `web/`（服务端静态提供）：
+前端单独构建（改动 `frontend/` 之后）：
 
 ```bash
-cd frontend
-npm install
-npm run build      # 产出到 ../web（index.html + assets/*.js|css）
-# 开发模式：npm run dev（5173，已代理 /ws 到后端 8080）
+cd frontend && npm install && npm run build   # 产出到 ../web
 ```
 
-> `web_root` 是相对**运行目录**的路径。从仓库 `build/` 目录运行时指向构建产物 `web/`，
-> 即 `"web_root": "../web"`（已在 `build/configure.json` 配好）；若在仓库根目录运行则用 `"./web"`。
+跑起来之后浏览器打开 `http://<host>:8080/` 即可（仅 `net_layer=websocket` 模式会提供页面与静态资源）。
 
-> 后端静态服务后缀白名单不含 `wasm/webp/avif/ttf`，且无 SPA fallback，因此前端用 hash 路由、字体用 woff2 或系统字体。
+## 配置
 
-**方式二**：低阶 protobuf 协议测试页 `tests/ws_browser_test.html`。从仓库根目录启动静态服务：
+`configure.json`（相对运行目录）主要项：
 
-```bash
-python3 -m http.server 8000
-# 然后打开 http://<host>:8000/tests/ws_browser_test.html
-```
+1. `net_layer`：`binary` 或 `websocket`，**启动时读取，改完要重启**，两者不能同时跑。
+2. 心跳：`use_heartbeat` / `heartbeat_interval`（业务层心跳，不是 WS 自带 ping）。
+3. 连接与线程：`max_connections`、`business_threads`。
+4. WebSocket：`path`、`io_threads`、`max_message_bytes`、`max_pending_bytes`、`web_root`。
+5. 数据库连接池：`database.*`（`db_conn_count`）。
+6. Redis：`redis.enabled/host/port/db/pool_size/timeout_ms`，关掉后回退纯 MySQL。
+7. 文件存储：`file_storage.*`（分片大小、单文件上限、传输超时等）。
 
-页面里 Host 填服务端地址、Port `8080`、Path `/ws`，点「连接」即可注册/登录/私聊。
+> 完整部署（systemd、Nginx 反代、证书、常见问题）见 [Docs/部署文档.md](Docs/部署文档.md)。
 
 ## 测试
 
-可选单元测试（不需要 MySQL）：
-
 ```bash
-cmake -S . -B build -DSERVER_BUILD_TESTS=ON
-cmake --build build -j8
+# 单元测试（不需要 MySQL）
+cmake -S . -B build -DSERVER_BUILD_TESTS=ON && cmake --build build -j8
 ctest --test-dir build --output-on-failure
+
+# 端到端冒烟（需要 MySQL，服务端以 net_layer=websocket 启动）
+python3 tests/ws_chat_smoke.py 127.0.0.1 8080 /ws      # 注册/登录/好友/私聊/群聊/离线/顶号
+python3 tests/community_smoke.py 127.0.0.1 8080 /ws    # 社区/频道/成员管理
+python3 tests/test_group_broadcast.py 127.0.0.1 8080 /ws  # 群聊广播多端字段一致性
+python3 tests/file_smoke.py 127.0.0.1 8080 /ws         # 分片上传下载、暂停续传、断线续传
 ```
-
-端到端冒烟（需要 MySQL，且服务端已以 `net_layer=websocket` 启动）：
-
-```bash
-python3 tests/ws_chat_smoke.py 127.0.0.1 8080 /ws
-# 社区功能（建社区/建频道/频道发言/成员管理/结构化列表）
-python3 tests/community_smoke.py 127.0.0.1 8080 /ws
-# 群聊广播多接收方一致性（验证广播构造/序列化一次后多端字段一致）
-python3 tests/test_group_broadcast.py 127.0.0.1 8080 /ws
-# 文件系统（分片上传/下载/暂停续传/断线重连续传）
-python3 tests/file_smoke.py 127.0.0.1 8080 /ws
-# 额外验证空闲超时（服务端需 use_heartbeat=true 且 heartbeat_interval<=N）
-python3 tests/ws_chat_smoke.py 127.0.0.1 8080 /ws --idle-seconds=3
-```
-
-冒烟脚本覆盖：注册/登录、好友申请与接受、私聊、建群/拉人/群聊、离线消息、顶号、空闲超时；社区冒烟覆盖建社区/建频道/频道发言/成员管理/列表拉取；文件冒烟覆盖分片上传/下载、暂停/继续、断线重连续传。
 
 ## 文档
 
-- **[部署文档.md](Docs/部署文档.md)** —— 从零部署（依赖安装、建库、构建、systemd、Nginx、常见问题）。
-- **[客户端接口文档.txt](Docs/客户端接口文档.txt)** —— 前后端 protobuf / 帧协议接口规范（建议客户端开发者先读此文档）。
-- **[frontend/README.md](frontend/README.md)** —— 前端（Vite + Vue 3）开发构建说明与 UI 交互功能清单。
-- **[社区后端改造方案.md](Docs/社区后端改造方案.md)** —— 社区（Discord 式）后端改造设计、DB 迁移、Redis 缓存点与里程碑。
-- **[protobuf改造方案-done.md](Docs/protobuf改造方案-done.md)** —— JSON → protobuf 的设计、落地文件与验证矩阵。
-- **[WebSocket接入代码改动文档-done.md](Docs/WebSocket接入代码改动文档-done.md)** —— WebSocket 接入历史记录（正文包含旧 JSON/text 阶段，当前协议以接口文档为准）。
-- **[client_session拆分方案-done.md](Docs/client_session拆分方案-done.md)** —— client_session 拆分与业务逻辑下沉到 handler 的记录。
-- **[数据库设计.txt](Docs/数据库设计.txt)** —— 数据库表结构、UID 分配与连接池接入说明。
-- **[Redis缓存方案-done.md](Docs/Redis缓存方案-done.md)** —— Redis 缓存接入方案与实现状态（C1/C2/C4/C7-C11 已落地，C3/C5/C6 待做），附并发/稳定性瓶颈分析。
-- **[压力测试方案.md](Docs/压力测试方案.md)** —— WebSocket 压测方案与用例清单。
-- **[文件系统方案.md](Docs/文件系统方案.md)** —— 文件系统设计（统一 File 体系/磁盘存储/分片传输/暂停续传/watchdog），配套 `sql/file_system.sql`、`sql/alter_existing_tables.sql`；权威文件另存于 `/home/ubuntu/chat_server_files/`。
-- **[文件传输系统说明.md](Docs/文件传输系统说明.md)** —— 文件传输系统运作详解（每个模块/函数职责、完整流程）。
-- **[架构模型与状态机.md](Docs/架构模型与状态机.md)** —— 网络模型/业务模型/文件传输模型/Session 生命周期/状态机的 ASCII 图。
-- **[开发日志.txt](build/开发日志.txt)** —— 待办清单与开发日志（当前位于 build/ 目录，含历次架构重构与问题修复记录）。
+- [部署文档.md](Docs/部署文档.md) —— 从零部署：依赖、建库、构建、systemd、Nginx、常见问题
+- [客户端接口文档.txt](Docs/客户端接口文档.txt) —— 帧格式、`Envelope` 字段总表、每个消息类型的请求/响应、系统提示文本
+- [架构模型与状态机.md](Docs/架构模型与状态机.md) —— 网络 / 业务 / 文件传输模型、Session 生命周期、状态机
+- [前端说明](frontend/README.md) —— Vite + Vue 3 的开发构建与 UI 功能清单
+- [社区后端改造方案.md](Docs/社区后端改造方案.md) —— Discord 式社区表结构、权限与 Redis 缓存点
+- [protobuf改造方案-done.md](Docs/protobuf改造方案-done.md) —— JSON → protobuf 的迁移设计与验证矩阵
+- [WebSocket接入代码改动文档-done.md](Docs/WebSocket接入代码改动文档-done.md) —— WebSocket 层接入记录
+- [client_session拆分方案-done.md](Docs/client_session拆分方案-done.md) —— 会话拆分与业务逻辑下沉 handler
+- [数据库设计.txt](Docs/数据库设计.txt) —— 表结构、UID 分配、连接池接入
+- [Redis缓存方案-done.md](Docs/Redis缓存方案-done.md) —— 缓存点现状（C1/C2/C4/C7–C11 已落地）与瓶颈分析
+- [文件系统方案.md](Docs/文件系统方案.md) / [文件传输系统说明.md](Docs/文件传输系统说明.md) —— 文件体系、分片、续传、watchdog
+- [压力测试方案.md](Docs/压力测试方案.md) —— WebSocket 压测方案与用例
+- [开发日志.txt](build/开发日志.txt) —— 待办与历次重构记录
 
-## 项目结构（概要）
+## 目录结构
 
 ```
-server/
+.
 ├── src/
-│   ├── main.cpp            # 入口：socket、主从 Reactor、线程池、初始化 MySQL/Redis 连接池
-│   ├── net_core/           # 网络核心层：epoller / client_session / notice_service / group_manager / receiver_sender / session_manager
-│   ├── net_common/         # 传输抽象：IClientTransport（让业务层不依赖具体 TCP/WS）
-│   ├── net_core_ws/        # WebSocket 网络层：ws_server / ws_session / ws_protocol（Boost.Asio + Beast，含静态前端服务）
-│   ├── proto/              # protobuf 协议唯一来源：message.proto
-│   ├── logic/              # 业务逻辑层：account / group / social_module / handlers（各消息处理器）
-│   ├── db/                 # 数据库分层：mysql(连接池) / repo_interface(接口契约) / repo(MySQL 实现)
-│   └── utils/              # 线程池 + server_config + redis_client/redis_cache（Redis 缓存）
-├── include/total.h         # 基础设施公共头（不再是"万能头"）
-├── configure.json          # 运行配置（网络层 / 心跳 / 连接上限 / WebSocket / 数据库连接池 / Redis 缓存）
-├── sql/create_table.sql    # 数据库建表脚本（11 张表：Account/.../file/file_transfer，与当前库一致）
-├── sql/file_system.sql     # 文件系统建表脚本（file/file_transfer）
-├── sql/alter_existing_tables.sql # 现有表改造（Account.avatar_id、message.is_file/file_id）
-├── sql/alter_community_avatar_banner.sql # 社区头像/背景图（community.avatar_id/banner_id）
-├── sql/alter_file_transfer_upload_meta.sql # 上传会话元数据持久化（断线重连续传）
-├── sql/set_timezone_utc.sql # 旧库时间 UTC 一次性迁移（时间差 8 小时用）
-├── frontend/               # 前端源码（Vite + Vue 3）：npm run build 输出到 web/
-├── web/                    # 前端构建产物（由 WS 服务端静态提供，勿手改）
-├── tests/                  # 可选单元测试 + 端到端冒烟脚本 + 低阶浏览器测试页
+│   ├── main.cpp            # 入口：监听、主从 Reactor、线程池、连接池初始化
+│   ├── net_core/           # epoll 网络层：epoller / client_session / session_manager / notice_service ...
+│   ├── net_core_ws/        # WebSocket 网络层：ws_server / ws_session（Boost.Asio + Beast，含静态资源服务）
+│   ├── net_common/         # 传输抽象 IClientTransport + 消息载体
+│   ├── proto/              # message.proto（协议唯一来源）
+│   ├── logic/              # 业务层：account / group / social_module + handlers（各类型消息处理器）
+│   ├── db/                 # mysql 连接池 / repo_interface 契约 / repo MySQL 实现
+│   └── utils/              # 线程池、配置、Redis 客户端与缓存
+├── include/total.h         # 基础公共头
+├── configure.json          # 运行配置
+├── sql/                    # 建表与迁移脚本
+├── deploy/nginx-chat.conf  # HTTPS + WSS 反代示例
+├── frontend/               # Vue 3 源码（npm run build → web/）
+├── web/                    # 前端构建产物（后端静态托管，勿手改）
+├── tests/                  # 单元测试 + 端到端冒烟脚本 + 低阶浏览器测试页
 └── build/                  # 构建输出
 ```
 
-> 说明：仓库同时包含后端、Vue 前端、protobuf schema 与测试客户端。
+## 说明
+
+- 仓库里同时包含后端、Vue 前端、protobuf schema、SQL 脚本与测试，`src/proto/message.proto` 是协议定义的唯一来源，
+  前后端字段号必须一致。
+- 服务端的 TLS 由 Nginx / Cloudflare 负责，C++ 进程只讲明文 WebSocket；这也是为什么
+  客户端必须连 `wss://bakacomm.world/ws` 而不是 `wss://<ip>:8080`。

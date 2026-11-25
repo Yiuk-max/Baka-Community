@@ -32,12 +32,12 @@ export const backend = reactive({
   groupMembers: {},
   groupRequests: {},
   communityRequests: {},
-  files: [],
   fileUrls: {},
   transfers: {},
   transferOrder: [],
   lastNotice: '',
   noticeSeq: 0,
+  pendingVerify: null,   // { uid, email }：注册成功或登录被邮箱验证拦截时置位，App.vue 监听后跳验证码页
 })
 
 let ws = null
@@ -253,7 +253,6 @@ async function receive(event, socket) {
     case 'Group_Chat': return liveMessage(message, 'group', message.group_UID)
     case 'Channel_Chat': return liveMessage(message, 'channel', message.group_UID)
     case 'delete_message': return deleteMessageLocal(message.message_id)
-    case 'file_list_response': return fileListResponse(message)
     case 'file_upload_ready': return uploadReady(message)
     case 'file_upload_complete': return uploadComplete(message)
     case 'file_download_ready': return downloadReady(message)
@@ -292,7 +291,6 @@ function loginSuccess(message) {
     showContacts()
     showFriendRequests()
     showCommunities()
-    requestFileList()
   }, 120)
 }
 
@@ -513,7 +511,9 @@ function systemMessage(content) {
   const addedMember = /Member \[(\d+)\] added to community \[(\d+)\]/i.exec(text)
   const addedToCommunity = /You have been added to community \[(\d+)\]/i.exec(text)
   const failedCommunityAdd = /Failed to add member \((.*?)\)/i.exec(text)
-  const registration = /Registration successful.*UID (\d+).*?or ([^\s.]+)\./.exec(text)
+  // 邮箱可能含 "."，所以邮箱部分不能用 [^\s.]+（旧正则会在第一个点截断，导致重发验证码收不到）
+  const registration = /Registration successful.*?UID (\d+).*?or (.+?)\.?\s*$/i.exec(text)
+  const notVerified = /Email not verified for UID (\d+)/i.exec(text)
   if (addedMember) {
     const targetUid = Number(addedMember[1]); const communityId = Number(addedMember[2])
     const index = communityAddQueue.findIndex((item) => item.communityId === communityId && item.uid === targetUid)
@@ -530,7 +530,16 @@ function systemMessage(content) {
     communityAddQueue.shift()
     notice(t('添加社区成员失败：仅社区所有者可添加，或该用户已在社区中'))
   }
-  else if (registration) { try { localStorage.setItem(EMAIL_KEY + registration[1], registration[2]) } catch {} notice(t('注册成功，UID：{0}，请登录', registration[1])) }
+  else if (registration) {
+    try { localStorage.setItem(EMAIL_KEY + registration[1], registration[2]) } catch {}
+    // 注册成功后把 uid/邮箱交给 App.vue，直接切到验证码页（原来靠匹配英文原文，但 notice 已被翻译成中文，那段是死代码）
+    backend.pendingVerify = { uid: registration[1], email: registration[2] }
+    notice(t('注册成功，UID：{0}，请输入邮箱验证码', registration[1]))
+  }
+  else if (notVerified) {
+    backend.pendingVerify = { uid: notVerified[1], email: '' }
+    notice(t('邮箱未验证，请先输入验证码'))
+  }
   else if (/Avatar updated successfully/.test(text)) { if (pendingAvatarId > 0) backend.avatarId = pendingAvatarId; pendingAvatarId = 0; notice(text) }
   else if (/Failed to update avatar|Invalid file_id|Avatar file not found|not allowed for avatar/i.test(text)) { pendingAvatarId = 0; notice(text) }
   else if (/Your account is logged in elsewhere, you have been kicked offline/i.test(text)) {
@@ -572,7 +581,6 @@ function systemMessage(content) {
   const changedCommunityId = Number(/(?:added to|removed from) community \[(\d+)\]/i.exec(text)?.[1] || 0)
   if (changedCommunityId && Number(backend.activeCommunityId) === changedCommunityId) setTimeout(() => showMembers(changedCommunityId), 200)
   if (/Channel created|Channel deleted|Channel updated/.test(text) && backend.activeCommunityId) setTimeout(() => showChannels(backend.activeCommunityId), 200)
-  if (/File deleted/.test(text)) setTimeout(requestFileList, 150)
   handleTransferError(text)
 }
 
@@ -586,7 +594,7 @@ function clearAccount() {
   pendingAvatarId = 0
   backend.uid = null; backend.name = ''; backend.email = ''; backend.avatarId = 0; backend.contacts = []; backend.communities = []
   backend.activeCommunityId = null; backend.channels = {}; backend.members = {}; backend.conversations = {}; backend.activeKey = ''; backend.unreadConversations = {}
-  backend.friendRequests = []; backend.groupMembers = {}; backend.groupRequests = {}; backend.communityRequests = {}; backend.files = []
+  backend.friendRequests = []; backend.groupMembers = {}; backend.groupRequests = {}; backend.communityRequests = {}
   clearTransportQueues()
   notice(t('已登出'))
 }
@@ -597,6 +605,8 @@ export function login(identity, password) {
   return value.includes('@') ? send({ type: 'login', email: value, password }) : send({ type: 'login', UID: Number(value), password })
 }
 export function register(username, email, password) { return send({ type: 'register', username, email, password }) }
+export function verifyEmail(code, uid) { return send({ type: 'verify_email', code, UID: uid ? Number(uid) : 0 }) }
+export function resendVerify(email) { return send({ type: 'resend_verify', email: email || '' }) }
 export function logout() {
   localStorage.removeItem(TOKEN_KEY)
   for (const task of Object.values(backend.transfers)) if (ownsTask(task) && task.transferId && ['上传中','下载中','校验中','正在续传'].includes(task.status)) send({ type: 'file_transfer_pause', transfer_id: Number(task.transferId) })
@@ -685,13 +695,10 @@ export function setAvatar(fileId) { return send({ type: 'set_avatar', file_id: S
 
 const nowClock = () => { const now = new Date(); return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}` }
 
-// 文件协议：保持原文件工作台 DOM，只把数据与按钮切换为真实任务。
+// 文件协议：把服务端的 file_meta 转成前端用的文件对象。
 function normalizeFile(item = {}) {
   return { id: String(item.file_id || ''), fileId: String(item.file_id || ''), name: item.original_name || '文件', format: (item.original_name?.split('.').pop() || 'FILE').toUpperCase(), size: Number(item.size || 0), type: item.type || 'file', status: '已完成', mime: item.mime_type || 'application/octet-stream', createdAt: item.created_at || '', url: '' }
 }
-function fileListResponse(message) { backend.files = (message.files || []).map(normalizeFile) }
-export function requestFileList() { return send({ type: 'file_list_request' }) }
-export function deleteFile(fileId) { return send({ type: 'file_delete', file_id: String(fileId) }) }
 function activePreviewDownloads() {
   return Object.values(backend.transfers).filter((task) => ownsTask(task) && task.silent && !['已完成', '失败', '已取消', '已中断'].includes(task.status)).length
 }
@@ -839,7 +846,6 @@ function uploadComplete(message) {
     if (task.onComplete) task.onComplete(file)
     task.file = null; task.onComplete = null
   }
-  backend.files = [file, ...backend.files.filter((item) => item.fileId !== file.fileId)]
   persistUploads()
 }
 function sendFileMessage(key, file) {
@@ -1017,7 +1023,8 @@ export const api = {
   addFriend, handleFriend, removeFriend, setFriendRemark, createGroup, joinGroup, groupAdd, groupRemove, groupRename, groupDelete, groupRole, handleGroupRequest,
   createCommunity, joinCommunity, leaveCommunity, deleteCommunity, modifyCommunity, createChannel, deleteChannel, handleCommunityRequest, communityAdd, communityRemove, communityRole,
   changeName, setEmail, setAvatar, ensureFileUrl,
-  uploadFile, downloadFile, pauseTransfer, bindResumeFile, resumeTransfer, cancelTransfer, dismissTransfer, requestFileList, deleteFile,
+  uploadFile, downloadFile, pauseTransfer, bindResumeFile, resumeTransfer, cancelTransfer, dismissTransfer,
+  verifyEmail, resendVerify,
   activeConversation,
 }
 

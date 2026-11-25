@@ -25,8 +25,11 @@ static int run_binary_server(unsigned short port){
     //bind the socket to an address and port
     struct sockaddr_in6 server_addr{};
     server_addr.sin6_family = AF_INET6;
-    server_addr.sin6_addr = in6addr_any;    //listen on all interfaces
+    // 只监听回环：二进制层的 8080 同样不应该直接暴露公网（见 ws_server.cpp 同名注释）
+    server_addr.sin6_addr = in6addr_loopback;
     server_addr.sin6_port = htons(port);
+    int v6only = 0;   // 关闭 v6only，使 127.0.0.1 也能连上
+    setsockopt(server_fd,IPPROTO_IPV6,IPV6_V6ONLY,&v6only,sizeof(v6only));
     int opt = 1;
     if(setsockopt(server_fd,SOL_SOCKET,SO_REUSEADDR,&opt,sizeof(opt)) == -1){
         std::cerr << "Failed to set socket options" << std::endl;

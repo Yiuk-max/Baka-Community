@@ -70,6 +70,9 @@ public:
     uint64_t    file_max_avatar_size() const;   // 头像文件上限（默认 10 MiB）
     int         file_transfer_timeout_seconds() const; // 传输超时（watchdog，默认 1800s）
 
+    // ---- 邮件配置 ----
+    std::string resend_api_key() const;    // Resend API Key（必须配置，否则发信跳过）
+
 private:
     ServerConfig() = default;
 
@@ -112,4 +115,7 @@ private:
     uint64_t    file_max_storage_size_ = 10ULL * 1024 * 1024 * 1024;
     uint64_t    file_max_avatar_size_  = 10ULL * 1024 * 1024;
     int         file_transfer_timeout_seconds_ = 1800;
+
+    // 邮件配置
+    std::string resend_api_key_ = "";   // Resend API Key，空串表示未配置（发信功能关闭）
 };

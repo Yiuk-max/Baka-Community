@@ -34,4 +34,6 @@ public:
 
     bool get_stale_transfers(int timeout_seconds,
                              std::vector<file_transfer_info>& out) override;
+
+    bool can_access_file(int uid, int file_id) override;
 };

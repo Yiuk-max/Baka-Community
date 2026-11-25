@@ -37,6 +37,12 @@ const dmQuickMenu = ref(false)
 const friendRequestModal = ref(false)
 const demoLoginOpen = ref(true)
 const demoAuthMode = ref('登录')
+const demoAuthSubpage = ref('form')
+const pendingVerifyEmail = ref('')
+const pendingVerifyUid = ref('')
+const verifyCode = ref('')
+const verifyCodeCooldown = ref(0)
+let verifyCodeCooldownTimer = null
 const demoSignedIn = ref(false)
 const demoAuth = reactive({ identity: '', password: '', username: '', email: '' })
 const demoUid = ref('')
@@ -48,14 +54,9 @@ const demoFriends = ref([])
 const demoFriendRequests = ref([])
 const demoGroups = ref([])
 const demoGroupRequests = ref([])
-const demoFiles = ref([])
 const demoCommunityRequests = ref([])
 const demoForm = reactive({ name: '', email: '', note: '', groupName: '', memberUid: '', communityName: '', joinCode: '' })
 const demoSearch = ref('')
-const demoFilesInput = ref(null)
-const resumeFileInput = ref(null)
-const resumeTransferTarget = ref(null)
-const activeTransfer = computed(() => backend.transferOrder.map((id) => backend.transfers[id]).find((task) => task && !task.silent && (!task.ownerUid || Number(task.ownerUid)===Number(backend.uid)) && !['已完成','已取消','失败'].includes(task.status)) || null)
 // 全局传输进度弹窗：静默图片/头像预览不显示，其余上传和下载都显示。
 const transferTasks = computed(() => backend.transferOrder.map((id) => backend.transfers[id]).filter((task) => task && !task.silent && Number(task.ownerUid) === Number(backend.uid)))
 const transferAutoDismissTimers = new Map()
@@ -1101,7 +1102,7 @@ const submitJoinGroup = () => {
 }
 const openSettings = () => { settingsMobileDetail.value=false; settingsOpen.value=true }
 const openProfileSettings = () => { selectedSetting.value='账户'; settingsMobileDetail.value=true; settingsOpen.value=true; profileEditorOpen.value=true }
-const selectSetting = (name) => { selectedSetting.value = name; settingsMobileDetail.value=true; if (!['账户','Baka','文件'].includes(name)) notDeveloped(name) }
+const selectSetting = (name) => { selectedSetting.value = name; settingsMobileDetail.value=true; if (!['账户','Baka'].includes(name)) notDeveloped(name) }
 const handleProfileBackground = (event) => { event.target.value = ''; notDeveloped(t('个人资料背景')) }
 const closeSettings = () => { settingsOpen.value = false; settingsMobileDetail.value=false; profileEditorOpen.value = false; profileBackgroundMenu.value = false }
 const closeProfileEditor = () => { profileEditorOpen.value = false; profileBackgroundMenu.value = false }
@@ -1127,10 +1128,6 @@ const syncBackendState = () => {
   for (const [groupId, requests] of Object.entries(backend.groupRequests)) for (const request of requests) allGroupRequests.push({ ...request, group: backend.contacts.find((item) => item.uid === Number(groupId))?.name || groupId, groupUid: Number(groupId) })
   demoGroupRequests.value = allGroupRequests
   communities.value = backend.communities.map((item) => ({ ...item, mark: item.name.slice(0, 1), color: '#5865f2', icon: '', members: (backend.members[item.id] || []).length, online: 0 }))
-  demoFiles.value = [
-    ...backend.transferOrder.map((id) => backend.transfers[id]).filter((task) => task && !task.silent && (!task.ownerUid || Number(task.ownerUid)===Number(backend.uid)) && !(task.direction==='upload'&&task.status==='已完成')).map((task) => ({ ...task, id: task.localId, size: task.totalSize, type: task.direction, format: task.format || 'FILE' })),
-    ...backend.files.filter((file) => file.type !== 'avatar'),
-  ]
   if (!selectedCommunity.value && communities.value.length) selectedCommunity.value = communities.value[0].name
   if (selectedCommunity.value && !communities.value.some((item) => item.name === selectedCommunity.value)) selectedCommunity.value = communities.value[0]?.name || ''
   const contacts = backend.contacts.map((item) => ({ uid: item.uid, name: item.name, avatar: item.name[0] || '?', kind: item.isGroup ? '群聊' : '好友', online: false, messages: [] }))
@@ -1150,7 +1147,6 @@ watch(() => ({
   groupRequests: Object.fromEntries(Object.entries(backend.groupRequests).map(([id,list]) => [id,list.map((item) => ({...item}))])),
   communityRequests: Object.fromEntries(Object.entries(backend.communityRequests).map(([id,list]) => [id,list.map((item) => ({...item}))])),
   members: Object.fromEntries(Object.entries(backend.members).map(([id,list]) => [id,list.map((item) => ({...item}))])),
-  files: backend.files.map((item) => ({...item})),
   transfers: backend.transferOrder.map((id) => { const task=backend.transfers[id];return task?{id,status:task.status,progress:task.progress,transferred:task.transferred,fileId:task.fileId,url:task.url,error:task.error}:null }),
 }), syncBackendState, { deep: true, immediate: true })
 watch(() => backend.noticeSeq, () => {
@@ -1171,6 +1167,23 @@ watch(() => backend.noticeSeq, () => {
   }
   const registered=/注册成功，UID：(\d+)/.exec(notice)
   if (registered) { demoAuth.identity=registered[1];demoAuthMode.value='登录' }
+  // 验证码页入口：backClient 在注册成功/登录被拦截时置位 pendingVerify（不再依赖英文原文匹配）
+  if (/Email verified successfully/.test(notice)) { demoAuthSubpage.value='form';demoAuthMode.value='登录';verifyCode.value='';pendingVerifyEmail.value='' }
+  if (/Invalid or expired verification code/.test(notice)) { /* notice already shown */ }
+  const cooldownMatch=/Please wait (\d+) seconds before requesting another code/.exec(notice)
+  if (cooldownMatch) { startVerifyCooldown(Number(cooldownMatch[1])) }
+  if (/Verification email sent to/.test(notice)) { startVerifyCooldown(60) }
+})
+watch(() => backend.pendingVerify, (pv) => {
+  if (!pv) return
+  pendingVerifyUid.value = String(pv.uid)
+  if (pv.email) pendingVerifyEmail.value = pv.email
+  demoAuth.identity = String(pv.uid)
+  demoAuthMode.value = '登录'
+  demoLoginOpen.value = true
+  demoAuthSubpage.value = 'verify'
+  startVerifyCooldown(60)
+  backend.pendingVerify = null
 })
 watch(profileEditorOpen, (open) => {
   if (!open) return
@@ -1235,6 +1248,7 @@ watch(selectedCommunity, () => { const community=currentCommunity.value;demoComm
 const submitDemoAuth = () => {
   if (demoAuthMode.value === '注册') {
     if (!demoAuth.username.trim() || !demoAuth.email.trim() || !demoAuth.password.trim()) return demoNotice(t('请填写昵称、邮箱和密码'))
+    pendingVerifyEmail.value = demoAuth.email.trim()
     api.register(demoAuth.username.trim(), demoAuth.email.trim(), demoAuth.password)
   } else {
     if (!demoAuth.identity.trim() || !demoAuth.password.trim()) return demoNotice(t('请输入账号和密码'))
@@ -1242,7 +1256,23 @@ const submitDemoAuth = () => {
   }
   demoAuth.password = ''
 }
-const demoLogout = () => { api.logout(); demoAuthMode.value = '登录'; demoAuth.password = ''; demoLoginOpen.value = true }
+const startVerifyCooldown = (seconds) => {
+  if (verifyCodeCooldownTimer) clearInterval(verifyCodeCooldownTimer)
+  verifyCodeCooldown.value = seconds
+  verifyCodeCooldownTimer = setInterval(() => {
+    verifyCodeCooldown.value -= 1
+    if (verifyCodeCooldown.value <= 0) { clearInterval(verifyCodeCooldownTimer); verifyCodeCooldownTimer = null; verifyCodeCooldown.value = 0 }
+  }, 1000)
+}
+const submitVerifyCode = () => {
+  if (!verifyCode.value.trim()) return demoNotice(t('请输入验证码'))
+  api.verifyEmail(verifyCode.value.trim(), pendingVerifyUid.value)
+}
+const resendVerifyCode = () => {
+  if (verifyCodeCooldown.value > 0) return
+  api.resendVerify(pendingVerifyEmail.value)
+}
+const demoLogout = () => { api.logout(); demoAuthMode.value = '登录'; demoAuth.password = ''; demoLoginOpen.value = true; demoAuthSubpage.value = 'form' }
 const requestDemoFriend = () => {
   const email = demoForm.email.trim().toLowerCase()
   if (!email || !email.includes('@')) return demoNotice(t('请输入有效的邮箱地址'))
@@ -1275,15 +1305,7 @@ const handleDemoGroupRequest = (request, accept) => {if(api.handleGroupRequest(r
 const openDemoFriendChat = (friend) => {const contact=dmContacts.find(item=>Number(item.uid)===Number(friend.uid));if(contact)openDm(contact)}
 const openGroupChat = (group) => { const contact=dmContacts.find(item=>Number(item.uid)===Number(group.uid));if(contact)openDm(contact);api.showGroupMembers(group.uid);api.showGroupRequests(group.uid) }
 const deleteDemoGroup = (group) => {if(window.confirm(t('解散群聊“{0}”？', group.name)))api.groupDelete(group.uid)}
-const selectDemoFiles = () => demoFilesInput.value?.click()
-const addDemoFiles = (event) => {for(const file of Array.from(event.target.files||[]))api.uploadFile(file,false);event.target.value=''}
-const setDemoFileStatus = (file,status) => {const task=backend.transfers[file.localId];if(!task)return;if(status==='已暂停')api.pauseTransfer(task);else if(task.direction==='upload'&&!task.file&&['已中断','等待选择原文件'].includes(task.status)){resumeTransferTarget.value=task;resumeFileInput.value?.click()}else api.resumeTransfer(task)}
-const bindResumeUpload = (event) => {const file=event.target.files?.[0];if(file&&resumeTransferTarget.value)api.bindResumeFile(resumeTransferTarget.value,file);event.target.value='';resumeTransferTarget.value=null}
-const downloadDemoFile = (file) => {const task=backend.transfers[file.localId];if(task?.url){const link=document.createElement('a');link.href=task.url;link.download=task.name||'download';link.rel='noreferrer';document.body.appendChild(link);link.click();link.remove()}else api.downloadFile(file)}
-const toggleFileTransfer = (file) => {if(!file)return;if(['已暂停','已中断','等待选择原文件'].includes(file.status))setDemoFileStatus(file,'继续');else setDemoFileStatus(file,'已暂停')}
-const toggleActiveTransfer = () => toggleFileTransfer(activeTransfer.value)
 const closeTransferProgress = (task) => { if (['已完成','已取消','失败'].includes(task.status)) api.dismissTransfer(task); else api.cancelTransfer(task) }
-const deleteDemoFile = (file) => {const task=backend.transfers[file.localId];if(task){if(['已完成','已取消','失败'].includes(task.status))api.dismissTransfer(task);else api.cancelTransfer(task)}else api.deleteFile(file.fileId||file.id)}
 const handleDemoCommunityRequest = (request,accept) => {const community=currentCommunity.value;if(!community)return;if(api.handleCommunityRequest(community.id,request.uid,accept))setTimeout(()=>api.showCommunityRequests(community.id),200)}
 const inviteFriendToCommunity = (friend) => {
   const community = currentCommunity.value
@@ -1688,15 +1710,26 @@ const confirmAvatarCrop = () => {
     <section class="demo-login-window" role="dialog" aria-modal="true" aria-labelledby="demo-login-title">
       <button v-if="backend.authenticated" class="friend-request-close" :aria-label="t('关闭')" @click="demoLoginOpen=false">×</button>
       <div class="demo-login-logo"><img src="/logo.png" alt="LOGO"></div>
-      <h1 id="demo-login-title">{{backend.reconnecting?t('正在重新连接'):backend.authenticating?t('正在恢复登录'):t('欢迎回来')}}</h1><p>{{backend.reconnecting?t('连接中断，正在自动重连…'):backend.authenticating?t('正在验证登录状态…'):backend.connecting?t('正在连接服务器…'):backend.connected?t('登录账号，继续使用 Baka Community。'):t('服务器连接失败，请稍后重试。')}}</p>
-      <template v-if="!backend.authenticating && !backend.reconnecting">
-        <div class="demo-login-tabs"><button :class="{active:demoAuthMode==='登录'}" @click="demoAuthMode='登录'">{{ t("登录") }}</button><button :class="{active:demoAuthMode==='注册'}" @click="demoAuthMode='注册'">{{ t("注册") }}</button></div>
-        <label v-if="demoAuthMode==='注册'">昵称<input v-model="demoAuth.username" :placeholder="t('例如：小明')"></label>
-        <label v-if="demoAuthMode==='注册'">{{ t("邮箱") }}<input v-model="demoAuth.email" placeholder="name@example.com"></label>
-        <label v-else>{{ t("UID 或邮箱") }}<input v-model="demoAuth.identity" placeholder="100001 / name@example.com"></label>
-        <label>{{ t("密码") }}<input v-model="demoAuth.password" type="password" :placeholder="t('输入密码')" @keydown.enter.prevent="submitDemoLoginWindow"></label>
-        <button class="demo-login-submit" @click="backend.connected?submitDemoLoginWindow():api.connect()">{{backend.connecting?'连接中…':backend.connected?demoAuthMode:'重新连接'}}</button>
-      </template><div v-else class="login-restoring-indicator"><i></i><span>{{t(backend.reconnecting?'正在重新连接…':'自动登录中…')}}</span></div><small>{{ t("数据通过 WebSocket + protobuf 与服务器同步。") }}</small>
+      <template v-if="demoAuthSubpage==='verify'">
+        <h1 id="demo-login-title">{{ t('验证邮箱') }}</h1>
+        <p>{{ t('验证码已发送至') }} <b>{{pendingVerifyEmail}}</b>，{{ t('请查收邮件并输入 6 位验证码。') }}</p>
+        <label>{{ t('验证码') }}<input v-model="verifyCode" maxlength="6" placeholder="000000" inputmode="numeric" @keydown.enter.prevent="submitVerifyCode"></label>
+        <button class="demo-login-submit" @click="submitVerifyCode">{{ t('验证') }}</button>
+        <button class="demo-login-resend" :disabled="verifyCodeCooldown>0" @click="resendVerifyCode">{{verifyCodeCooldown>0?`${t('重新发送')} (${verifyCodeCooldown}s)`:t('重新发送验证码')}}</button>
+        <button class="demo-login-back" @click="demoAuthSubpage='form';demoAuthMode='注册'">{{ t('返回') }}</button>
+      </template>
+      <template v-else>
+        <h1 id="demo-login-title">{{backend.reconnecting?t('正在重新连接'):backend.authenticating?t('正在恢复登录'):t('欢迎回来')}}</h1><p>{{backend.reconnecting?t('连接中断，正在自动重连…'):backend.authenticating?t('正在验证登录状态…'):backend.connecting?t('正在连接服务器…'):backend.connected?t('登录账号，继续使用 Baka Community。'):t('服务器连接失败，请稍后重试。')}}</p>
+        <template v-if="!backend.authenticating && !backend.reconnecting">
+          <div class="demo-login-tabs"><button :class="{active:demoAuthMode==='登录'}" @click="demoAuthMode='登录'">{{ t("登录") }}</button><button :class="{active:demoAuthMode==='注册'}" @click="demoAuthMode='注册'">{{ t("注册") }}</button></div>
+          <label v-if="demoAuthMode==='注册'">昵称<input v-model="demoAuth.username" :placeholder="t('例如：小明')"></label>
+          <label v-if="demoAuthMode==='注册'">{{ t("邮箱") }}<input v-model="demoAuth.email" placeholder="name@example.com"></label>
+          <label v-else>{{ t("UID 或邮箱") }}<input v-model="demoAuth.identity" placeholder="100001 / name@example.com"></label>
+          <label>{{ t("密码") }}<input v-model="demoAuth.password" type="password" :placeholder="t('输入密码')" @keydown.enter.prevent="submitDemoLoginWindow"></label>
+          <button class="demo-login-submit" @click="backend.connected?submitDemoLoginWindow():api.connect()">{{backend.connecting?'连接中…':backend.connected?demoAuthMode:'重新连接'}}</button>
+        </template><div v-else class="login-restoring-indicator"><i></i><span>{{t(backend.reconnecting?'正在重新连接…':'自动登录中…')}}</span></div>
+      </template>
+      <small>{{ t("数据通过 WebSocket + protobuf 与服务器同步。") }}</small>
     </section>
   </div>
   <div v-if="memberProfile" class="member-profile-backdrop" @click.self="memberProfile=null">
@@ -1784,7 +1817,6 @@ const confirmAvatarCrop = () => {
         <nav class="settings-nav">
           <button :class="{active:selectedSetting==='账户'}" @click="selectSetting('账户')"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 20v-1.2a7 7 0 0 1 14 0V20z"/></svg>{{ t("账户") }}</button>
           <button :class="{active:selectedSetting==='Baka'}" @click="selectSetting('Baka')"><img class="settings-nav-logo" src="/logo.png" alt="">Baka</button>
-          <button :class="{active:selectedSetting==='文件'}" @click="selectSetting('文件')"><svg viewBox="0 0 24 24"><path d="M6 2h8l6 6v14H6z"/><path d="M14 2v6h6"/></svg>{{ t("文件") }}</button>
           <div class="settings-divider"></div>
           <button class="logout-setting" @click="closeSettings();demoLogout()"><Icon name="logout"/>{{ t("登出") }}</button>
         </nav>
@@ -1805,14 +1837,6 @@ const confirmAvatarCrop = () => {
               <div class="settings-row"><div class="settings-row-copy"><b>{{ t("收到消息时播放") }}</b><small>收到服务器实时推送的消息时播放一次。</small></div><button class="toggle" :class="{on:bakaOnReceive}" @click="bakaOnReceive=!bakaOnReceive"><i></i></button></div>
               <div class="settings-row"><div class="settings-row-copy"><b>{{ t("双击 LOGO 播放") }}</b><small>双击左侧竖栏顶部的 LOGO 播放一次。</small></div><button class="toggle" :class="{on:bakaOnLogo}" @click="bakaOnLogo=!bakaOnLogo"><i></i></button></div>
             </section>
-          </div>
-          <div v-else-if="selectedSetting==='文件'" class="account-settings-content">
-            <section class="account-section"><h1>{{ t("我的文件") }}</h1><p>文件保存在服务器，上传与下载均使用分片传输。</p></section>
-            <input ref="demoFilesInput" class="demo-hidden-input" type="file" multiple @change="addDemoFiles"><input ref="resumeFileInput" class="demo-hidden-input" type="file" @change="bindResumeUpload">
-            <div class="demo-panel-heading"><div><h2>传输与文件列表</h2><p>{{demoFiles.length}} 个文件</p></div><button class="demo-primary-button" @click="selectDemoFiles">＋ 上传文件</button></div>
-            <div class="demo-transfer-card"><div class="demo-transfer-icon">⇅</div><div><b>{{activeTransfer?.name||t('文件传输状态')}}</b><small>{{activeTransfer?`${activeTransfer.status} · ${activeTransfer.progress||0}%`:t('当前没有进行中的传输')}}</small></div><span class="demo-transfer-state"><i :class="{paused:!activeTransfer||activeTransfer.status==='已暂停'}"></i>{{activeTransfer?.status||'空闲'}}</span><button v-if="activeTransfer?.transferId" class="demo-soft-button" @click="toggleActiveTransfer">{{['已暂停','已中断','等待选择原文件'].includes(activeTransfer.status)?t('继续'):t('暂停')}}</button><button v-if="activeTransfer?.transferId" class="demo-icon-action danger" :title="t('取消传输')" @click="api.cancelTransfer(activeTransfer)">×</button></div>
-            <div class="demo-file-list"><article v-for="file in demoFiles" :key="file.id" class="demo-file-row"><div class="demo-file-thumb"><img v-if="file.url&&file.type==='image'" :src="file.url" :alt="file.name"><span v-else class="demo-file-ext" :class="file.format.toLowerCase()">{{file.format}}</span></div><div class="demo-row-copy"><b>{{file.name}}</b><p>{{file.format}} · {{formatFileSize(file.size)}} <span>·</span> {{ t(file.status) }}</p><div class="demo-file-progress"><i :class="{paused:file.status==='已暂停'}" :style="{width:`${file.progress??(file.status==='已完成'?100:0)}%`}"></i></div></div><div class="demo-file-actions"><button v-if="file.status==='已完成'" class="demo-soft-button" @click="downloadDemoFile(file)">{{ t("下载") }}</button><button v-if="file.localId&&file.transferId&&!['已完成','已取消','失败','正在取消'].includes(file.status)" class="demo-soft-button" @click="toggleFileTransfer(file)">{{['已暂停','已中断','等待选择原文件'].includes(file.status)?(file.status==='等待选择原文件'?t('选择原文件续传'):t('继续')):t('暂停')}}</button><button class="demo-icon-action danger" title="删除文件" @click="deleteDemoFile(file)">×</button></div></article><div v-if="!demoFiles.length" class="demo-empty-state">{{ t("还没有文件，上传一个文件开始使用。") }}</div></div>
-            <div class="demo-doc-note"><b>传输操作</b><span>上传初始化 · 文件分片 · 完成校验 · 断点续传 · 下载 · 暂停 / 继续 / 取消 · 文件列表 / 删除</span><small>文件通过 WebSocket 分片传输，并由服务器持久化。</small></div>
           </div>
 
           <div v-else class="settings-placeholder"><h1>{{ selectedSetting }}</h1><p>在这里调整 {{ selectedSetting }} 相关设置。</p></div>

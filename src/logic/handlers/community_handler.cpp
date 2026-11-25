@@ -86,6 +86,8 @@ void show_communities(client_session& s) {
         item->set_avatar(c.avatar);
         item->set_category(c.category);
         item->set_my_role(c.my_role);
+        item->set_avatar_id(c.avatar_id);
+        item->set_banner_id(c.banner_id);
     }
     s.package_envelope(resp);
 }

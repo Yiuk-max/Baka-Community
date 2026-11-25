@@ -3,10 +3,10 @@
 -- 数据库：MySQL 8.0（collate utf8mb4_0900_ai_ci）
 -- 字符集：utf8mb4（必须，否则中文/emoji 会乱码或插入失败）
 --
--- 包含 11 张表：
+-- 包含 12 张表：
 --   Account / account_email / friend_relation / relation_apply /
 --   `Group` / Groupmember / message / community / community_member /
---   file / file_transfer
+--   file / file_transfer / email_verification
 --
 -- 每张表前有三行注释，描述表内部字段：
 --   第一行：类型
@@ -282,3 +282,24 @@ CREATE TABLE IF NOT EXISTS file_transfer (
     CONSTRAINT fk_ft_receiver
         FOREIGN KEY (receiver_uid) REFERENCES Account(UID)   ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='文件传输会话表(分片/断点/暂停续传)';
+
+-- ------------------------------------------------------------
+-- 类型：id int unsigned | email varchar(190) | uid bigint unsigned | code char(6) | sent_at datetime | verified_at datetime | purpose enum('register')
+-- 名字：id | email | uid | code | sent_at | verified_at | purpose
+-- 说明：自增主键 | 目标邮箱 | 账号UID | 6位验证码 | 发送时间 | 验证完成时间(NULL=未验证) | 用途
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS email_verification (
+    id           INT UNSIGNED    NOT NULL AUTO_INCREMENT COMMENT '自增主键',
+    email        VARCHAR(190)    NOT NULL COMMENT '目标邮箱',
+    uid          BIGINT UNSIGNED NOT NULL COMMENT '账号UID',
+    code         CHAR(6)         NOT NULL COMMENT '6位数字验证码',
+    sent_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '发送时间(60s冷却依据)',
+    verified_at  DATETIME        NULL     COMMENT '验证完成时间(NULL=未验证)',
+    purpose      ENUM('register') NOT NULL DEFAULT 'register' COMMENT '用途',
+
+    PRIMARY KEY (id),
+    KEY idx_uid_purpose (uid, purpose),
+    KEY idx_email_purpose (email, purpose),
+    CONSTRAINT fk_ev_uid
+        FOREIGN KEY (uid) REFERENCES Account(UID) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='邮箱验证码表';

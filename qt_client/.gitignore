@@ -1,0 +1,8 @@
+# 构建产物（protobuf 装在机器级 D:/libs，不在仓库内）
+build/
+*.log
+
+# Qt Creator / clangd 缓存
+.qtcreator/
+CMakeLists.txt.user*
+*.autosave
