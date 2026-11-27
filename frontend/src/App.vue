@@ -155,6 +155,10 @@ watch([bakaOnSend, bakaOnReceive, bakaOnLogo, bakaVolume], () => {
 const composerInput = ref(null)
 const fileInput = ref(null)
 const uploads = ref([])
+// 拖动文件到输入框：dragDepth 抵消子元素间的 dragleave 抖动，dragHintTimer 让高亮不会闪
+const composerDragActive = ref(false)
+let composerDragDepth = 0
+let composerDragHintTimer = null
 const attachmentMenu = ref(null)
 const emojiPanelOpen = ref(false)
 const emojiPanelPos = ref(null)
@@ -231,6 +235,12 @@ const ReactionRow = (props) => h('div', { class: 'reaction-row' }, [
 // 消息输入沿用 vModelText 指令，保留中文输入法（IME）的组合输入行为。
 const Composer = (props) => {
   const parts = []
+  if (composerDragActive.value) {
+    parts.push(h('div', { class: 'composer-drop-hint', key: 'composer-drop-hint' }, [
+      h('b', null, t('松开鼠标即可添加到输入框')),
+      h('small', null, t('支持文件与图片，可一次拖入多个'))
+    ]))
+  }
   if (uploads.value.length) {
     parts.push(h('div', { class: 'attachment-tray' }, uploads.value.map((item) => {
       const task = item.transferLocalId ? backend.transfers[item.transferLocalId] : null
@@ -307,7 +317,15 @@ const Composer = (props) => {
       h('button', { onClick: () => handleAttachmentAction('upload') }, [h(Icon, { name: 'upload', class: 'upload-menu-icon' }), h('b', null, t('上传文件'))])
     ]))
   }
-  return h('form', { class: ['composer', { 'has-uploads': uploads.value.length }], onSubmit: (e) => { e.preventDefault(); submit() } }, parts)
+  return h('form', {
+    class: ['composer', { 'has-uploads': uploads.value.length, 'drag-active': composerDragActive.value }],
+    onSubmit: (e) => { e.preventDefault(); submit() },
+    // 电脑端把文件/图片拖进输入框就收进附件托盘，拖拽期间不弹出浏览器默认的“打开文件”
+    onDragenter: onComposerDragEnter,
+    onDragover: onComposerDragOver,
+    onDragleave: onComposerDragLeave,
+    onDrop: onComposerDrop
+  }, parts)
 }
 // 已撤回的消息：按消息 id 记录（作者 / 是否自己），渲染成一行系统提示，静态与动态消息通用
 const recalled = ref({})
@@ -539,12 +557,17 @@ onMounted(() => {
   window.addEventListener('contextmenu', closeFloatingMenus, true)
   window.addEventListener('keydown', onMenuKeydown)
   window.addEventListener('resize', syncSidebarWidthFromDom)
+  window.addEventListener('dragover', blockPageFileDrop)
+  window.addEventListener('drop', blockPageFileDrop)
 })
 onUnmounted(() => {
   window.removeEventListener('click', closeFloatingMenus)
   window.removeEventListener('contextmenu', closeFloatingMenus, true)
   window.removeEventListener('keydown', onMenuKeydown)
   window.removeEventListener('resize', syncSidebarWidthFromDom)
+  window.removeEventListener('dragover', blockPageFileDrop)
+  window.removeEventListener('drop', blockPageFileDrop)
+  if (composerDragHintTimer) { clearTimeout(composerDragHintTimer); composerDragHintTimer = null }
   window.removeEventListener('keydown', onLightboxKey)
   window.removeEventListener('mousemove', lightboxDragMove)
   window.removeEventListener('mouseup', lightboxDragEnd)
@@ -933,9 +956,11 @@ const submit = async () => {
   const log = document.querySelector('.message-scroll, .dm-thread')
   if (log) log.scrollTop = log.scrollHeight
 }
-const handleFiles = async (event) => {
-  const selected = Array.from(event.target.files || [])
+// 拖拽与「+ 上传文件」共用的入托盘逻辑：把 File 列表塞进 uploads
+const addFiles = (selected) => {
+  let added = 0
   for (const file of selected) {
+    if (!file || !file.name) continue
     const ext = file.name.includes('.') ? file.name.split('.').pop().toUpperCase() : 'FILE'
     uploads.value.push({
       id: `${file.name}-${file.lastModified}-${Math.random().toString(36).slice(2, 8)}`,
@@ -943,13 +968,72 @@ const handleFiles = async (event) => {
       name: file.name,
       format: ext,
       size: file.size,
-      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : ''
+      preview: String(file.type || '').startsWith('image/') ? URL.createObjectURL(file) : ''
     })
+    added += 1
   }
+  return added
+}
+const handleFiles = async (event) => {
+  addFiles(Array.from(event.target.files || []))
   event.target.value = ''
   // 选完文件直接回到输入框，接着打字或回车发送
   await nextTick()
   composerInput.value?.focus()
+}
+// 只接管「拖文件」的拖拽；拖选中的文字仍然走浏览器默认行为
+const isFileDrag = (event) => {
+  const types = event.dataTransfer?.types
+  if (!types) return false
+  for (let i = 0; i < types.length; i += 1) if (types[i] === 'Files') return true
+  return false
+}
+const setComposerDragActive = (active) => {
+  if (composerDragHintTimer) { clearTimeout(composerDragHintTimer); composerDragHintTimer = null }
+  composerDragActive.value = active
+}
+const onComposerDragEnter = (event) => {
+  if (!isFileDrag(event)) return
+  event.preventDefault()
+  composerDragDepth += 1
+  setComposerDragActive(true)
+}
+const onComposerDragOver = (event) => {
+  if (!isFileDrag(event)) return
+  // preventDefault 才能让输入框成为合法放置目标（否则浏览器会直接打开文件）
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+  if (composerDragHintTimer) { clearTimeout(composerDragHintTimer); composerDragHintTimer = null }
+  composerDragActive.value = true
+}
+const onComposerDragLeave = (event) => {
+  if (!isFileDrag(event)) return
+  composerDragDepth = Math.max(0, composerDragDepth - 1)
+  if (composerDragDepth > 0) return
+  // 在子元素之间移动也会触发 dragleave，稍微延迟一点，dragOver 会把它取消掉
+  if (composerDragHintTimer) clearTimeout(composerDragHintTimer)
+  composerDragHintTimer = setTimeout(() => { composerDragActive.value = false; composerDragHintTimer = null }, 80)
+}
+const onComposerDrop = async (event) => {
+  if (!isFileDrag(event)) return
+  event.preventDefault()
+  event.stopPropagation()
+  composerDragDepth = 0
+  setComposerDragActive(false)
+  const files = Array.from(event.dataTransfer?.files || [])
+  if (!files.length) return
+  if (!addFiles(files)) return
+  closeFloatingMenus()
+  await nextTick()
+  resizeComposer(composerInput.value)
+  composerInput.value?.focus()
+}
+// 兜底：拖到输入框以外松手时，阻止浏览器把文件当成页面打开（页面因此被替换掉）
+// 用函数声明而非 const，保证 onMounted 里注册监听时已可用（避免 TDZ）
+function blockPageFileDrop(event) {
+  if (event.defaultPrevented || !isFileDrag(event)) return
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'none'
 }
 const removeUpload = (id) => {
   const index = uploads.value.findIndex((item) => item.id === id)
@@ -1996,6 +2080,11 @@ const confirmAvatarCrop = () => {
 .composer .composer-tools button.send-button svg{width:16px;height:16px;fill:currentColor;flex:none}
 .composer .composer-tools button.send-button:hover{background:#4752c4;color:#fff}
 .composer .composer-tools button.send-button:active{background:#3c45a5;transform:translateY(1px)}
+/* —— 文件拖拽进输入框：整块输入区高亮 + 提示层 —— */
+.composer.drag-active,.dm-main>.composer.drag-active{background:#242736;box-shadow:inset 0 0 0 2px #5865f2}
+.composer-drop-hint{position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:10px;border:2px dashed #6d78f6;border-radius:8px;background:#1a1c26e6;color:#dfe1ff;text-align:center;pointer-events:none}
+.composer-drop-hint b{font-size:14px;font-weight:600}
+.composer-drop-hint small{color:#a3a7c8;font-size:11px}
 .lightbox-backdrop{position:fixed;inset:0;z-index:6000;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;user-select:none}
 .lightbox-stage{position:relative;max-width:calc(100vw - 120px);max-height:calc(100vh - 120px);display:flex;align-items:center;justify-content:center;overflow:hidden}
 .lightbox-image{display:block;max-width:calc(100vw - 120px);max-height:calc(100vh - 120px);object-fit:contain;cursor:grab}
